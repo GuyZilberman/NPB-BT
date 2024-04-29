@@ -334,6 +334,10 @@ void add(){
 // Original:
 //#pragma omp for
 
+// The barrier at the end of the single is expensive and not needed since you get the barrier at the end of the
+// parallel region. So use nowait to turn it off.
+#pragma omp single nowait
+    {
 #pragma omp target teams distribute parallel for collapse(3) map(tofrom: u) map(to: rhs, grid_points)
     	for(int k=1; k<=grid_points[2]-2; k++){
     		for(int j=1; j<=grid_points[1]-2; j++){
@@ -344,6 +348,7 @@ void add(){
     			}
     		}
     	}
+    }
 	if(timeron && thread_id==0){timer_stop(T_ADD);}
 }
 
@@ -354,8 +359,8 @@ void adi(){
     	x_solve();
     	y_solve();
     	z_solve();
+        add();
     }
-    add();
 }
 
 void binvcrhs(double lhs[5][5], double c[5][5], double r[5]) {
@@ -363,8 +368,10 @@ void binvcrhs(double lhs[5][5], double c[5][5], double r[5]) {
 	for (int k = 0; k < 5; k++)
 	{
 		pivot=1.00/lhs[k][k];
+        // #pragma omp parallel for default(none) shared(lhs, c, r, k, pivot)
 		for (int i = k+1; i < 5; i++)
 			lhs[i][k]=lhs[i][k]*pivot;
+        // #pragma omp parallel for default(none) shared(c, k, pivot)
 		for (int i = 0; i < 5; i++)
 			c[i][k]=c[i][k]*pivot;
 		r[k]=r[k]*pivot;
