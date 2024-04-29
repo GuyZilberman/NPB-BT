@@ -81,7 +81,7 @@ Authors of the OpenMP code:
 #define T_RDIS2 10
 #define T_ADD 11
 #define T_LAST 11
-
+#define DO_NOT_ALLOCATE_ARRAYS_WITH_DYNAMIC_MEMORY_AND_AS_SINGLE_DIMENSION 1 // TODO guy DELETE
 /* global variables */
 #if defined(DO_NOT_ALLOCATE_ARRAYS_WITH_DYNAMIC_MEMORY_AND_AS_SINGLE_DIMENSION)
 static double us[KMAX][JMAXP+1][IMAXP+1];
@@ -231,18 +231,27 @@ int main(int argc, char* argv[]){
 	 * do one time step to touch all code, and reinitialize
 	 * ---------------------------------------------------------------------
 	 */
-	#pragma omp parallel
+	// #pragma omp parallel
+	// {
+	// 	adi();
+	// }
+    adi();
+    #pragma omp parallel
 	{
-		adi();
 		initialize();
 	}
+	// { // TODO guy DELETE
+	// 	adi();
+	// 	initialize();
+	// }
+    
 	for(i=1;i<=T_LAST;i++){timer_clear(i);}
 	timer_start(1);
-	#pragma omp parallel firstprivate(niter) private(step)
+	// #pragma omp parallel firstprivate(niter) private(step)
 	{
 		for(step=1; step<=niter; step++){
 			if((step%20)==0||step==1){
-				#pragma omp master
+				// #pragma omp master
 					printf(" Time step %4d\n",step);
 			}
 			adi();
@@ -320,283 +329,62 @@ int main(int argc, char* argv[]){
  * ---------------------------------------------------------------------
  */
 void add(){
-	int i, j, k, m;
 	int thread_id = omp_get_thread_num();
-
 	if(timeron && thread_id==0){timer_start(T_ADD);}
-	#pragma omp for
-	for(k=1; k<=grid_points[2]-2; k++){
-		for(j=1; j<=grid_points[1]-2; j++){
-			for(i=1; i<=grid_points[0]-2; i++){
-				for(m=0; m<5; m++){
-					u[k][j][i][m]=u[k][j][i][m]+rhs[k][j][i][m];
-				}
-			}
-		}
-	}
+// Original:
+//#pragma omp for
+
+#pragma omp target teams distribute parallel for collapse(3) map(tofrom: u) map(to: rhs, grid_points)
+    	for(int k=1; k<=grid_points[2]-2; k++){
+    		for(int j=1; j<=grid_points[1]-2; j++){
+    			for(int i=1; i<=grid_points[0]-2; i++){
+    				for(int m=0; m<5; m++){
+    					u[k][j][i][m]=u[k][j][i][m]+rhs[k][j][i][m];
+    				}
+    			}
+    		}
+    	}
 	if(timeron && thread_id==0){timer_stop(T_ADD);}
 }
 
 void adi(){
-	compute_rhs();
-	x_solve();
-	y_solve();
-	z_solve();
-	add();
+#pragma omp parallel
+    {
+        compute_rhs();
+    	x_solve();
+    	y_solve();
+    	z_solve();
+    }
+    add();
 }
 
-void binvcrhs(double lhs[5][5], double c[5][5], double r[5]){
+void binvcrhs(double lhs[5][5], double c[5][5], double r[5]) {
 	double pivot, coeff;
-	pivot=1.00/lhs[0][0];
-	lhs[1][0]=lhs[1][0]*pivot;
-	lhs[2][0]=lhs[2][0]*pivot;
-	lhs[3][0]=lhs[3][0]*pivot;
-	lhs[4][0]=lhs[4][0]*pivot;
-	c[0][0]=c[0][0]*pivot;
-	c[1][0]=c[1][0]*pivot;
-	c[2][0]=c[2][0]*pivot;
-	c[3][0]=c[3][0]*pivot;
-	c[4][0]=c[4][0]*pivot;
-	r[0]=r[0]*pivot;
-	/* */
-	coeff=lhs[0][1];
-	lhs[1][1]=lhs[1][1]-coeff*lhs[1][0];
-	lhs[2][1]=lhs[2][1]-coeff*lhs[2][0];
-	lhs[3][1]=lhs[3][1]-coeff*lhs[3][0];
-	lhs[4][1]=lhs[4][1]-coeff*lhs[4][0];
-	c[0][1]=c[0][1]-coeff*c[0][0];
-	c[1][1]=c[1][1]-coeff*c[1][0];
-	c[2][1]=c[2][1]-coeff*c[2][0];
-	c[3][1]=c[3][1]-coeff*c[3][0];
-	c[4][1]=c[4][1]-coeff*c[4][0];
-	r[1]=r[1]-coeff*r[0];
-	/* */
-	coeff=lhs[0][2];
-	lhs[1][2]=lhs[1][2]-coeff*lhs[1][0];
-	lhs[2][2]=lhs[2][2]-coeff*lhs[2][0];
-	lhs[3][2]=lhs[3][2]-coeff*lhs[3][0];
-	lhs[4][2]=lhs[4][2]-coeff*lhs[4][0];
-	c[0][2]=c[0][2]-coeff*c[0][0];
-	c[1][2]=c[1][2]-coeff*c[1][0];
-	c[2][2]=c[2][2]-coeff*c[2][0];
-	c[3][2]=c[3][2]-coeff*c[3][0];
-	c[4][2]=c[4][2]-coeff*c[4][0];
-	r[2]=r[2]-coeff*r[0];
-	/* */
-	coeff=lhs[0][3];
-	lhs[1][3]=lhs[1][3]-coeff*lhs[1][0];
-	lhs[2][3]=lhs[2][3]-coeff*lhs[2][0];
-	lhs[3][3]=lhs[3][3]-coeff*lhs[3][0];
-	lhs[4][3]=lhs[4][3]-coeff*lhs[4][0];
-	c[0][3]=c[0][3]-coeff*c[0][0];
-	c[1][3]=c[1][3]-coeff*c[1][0];
-	c[2][3]=c[2][3]-coeff*c[2][0];
-	c[3][3]=c[3][3]-coeff*c[3][0];
-	c[4][3]=c[4][3]-coeff*c[4][0];
-	r[3]=r[3]-coeff*r[0];
-	/* */
-	coeff=lhs[0][4];
-	lhs[1][4]=lhs[1][4]-coeff*lhs[1][0];
-	lhs[2][4]=lhs[2][4]-coeff*lhs[2][0];
-	lhs[3][4]=lhs[3][4]-coeff*lhs[3][0];
-	lhs[4][4]=lhs[4][4]-coeff*lhs[4][0];
-	c[0][4]=c[0][4]-coeff*c[0][0];
-	c[1][4]=c[1][4]-coeff*c[1][0];
-	c[2][4]=c[2][4]-coeff*c[2][0];
-	c[3][4]=c[3][4]-coeff*c[3][0];
-	c[4][4]=c[4][4]-coeff*c[4][0];
-	r[4]=r[4]-coeff*r[0];
-	/* */
-	pivot=1.00/lhs[1][1];
-	lhs[2][1]=lhs[2][1]*pivot;
-	lhs[3][1]=lhs[3][1]*pivot;
-	lhs[4][1]=lhs[4][1]*pivot;
-	c[0][1]=c[0][1]*pivot;
-	c[1][1]=c[1][1]*pivot;
-	c[2][1]=c[2][1]*pivot;
-	c[3][1]=c[3][1]*pivot;
-	c[4][1]=c[4][1]*pivot;
-	r[1]=r[1]*pivot;
-	/* */
-	coeff=lhs[1][0];
-	lhs[2][0]=lhs[2][0]-coeff*lhs[2][1];
-	lhs[3][0]=lhs[3][0]-coeff*lhs[3][1];
-	lhs[4][0]=lhs[4][0]-coeff*lhs[4][1];
-	c[0][0]=c[0][0]-coeff*c[0][1];
-	c[1][0]=c[1][0]-coeff*c[1][1];
-	c[2][0]=c[2][0]-coeff*c[2][1];
-	c[3][0]=c[3][0]-coeff*c[3][1];
-	c[4][0]=c[4][0]-coeff*c[4][1];
-	r[0]=r[0]-coeff*r[1];
-	/* */
-	coeff = lhs[1][2];
-	lhs[2][2]=lhs[2][2]-coeff*lhs[2][1];
-	lhs[3][2]=lhs[3][2]-coeff*lhs[3][1];
-	lhs[4][2]=lhs[4][2]-coeff*lhs[4][1];
-	c[0][2]=c[0][2]-coeff*c[0][1];
-	c[1][2]=c[1][2]-coeff*c[1][1];
-	c[2][2]=c[2][2]-coeff*c[2][1];
-	c[3][2]=c[3][2]-coeff*c[3][1];
-	c[4][2]=c[4][2]-coeff*c[4][1];
-	r[2]=r[2]-coeff*r[1];
-	/* */
-	coeff=lhs[1][3];
-	lhs[2][3]=lhs[2][3]-coeff*lhs[2][1];
-	lhs[3][3]=lhs[3][3]-coeff*lhs[3][1];
-	lhs[4][3]=lhs[4][3]-coeff*lhs[4][1];
-	c[0][3]=c[0][3]-coeff*c[0][1];
-	c[1][3]=c[1][3]-coeff*c[1][1];
-	c[2][3]=c[2][3]-coeff*c[2][1];
-	c[3][3]=c[3][3]-coeff*c[3][1];
-	c[4][3]=c[4][3]-coeff*c[4][1];
-	r[3]=r[3]-coeff*r[1];
-	/* */
-	coeff=lhs[1][4];
-	lhs[2][4]=lhs[2][4]-coeff*lhs[2][1];
-	lhs[3][4]=lhs[3][4]-coeff*lhs[3][1];
-	lhs[4][4]=lhs[4][4]-coeff*lhs[4][1];
-	c[0][4]=c[0][4]-coeff*c[0][1];
-	c[1][4]=c[1][4]-coeff*c[1][1];
-	c[2][4]=c[2][4]-coeff*c[2][1];
-	c[3][4]=c[3][4]-coeff*c[3][1];
-	c[4][4]=c[4][4]-coeff*c[4][1];
-	r[4]=r[4]-coeff*r[1];
-	/* */
-	pivot = 1.00/lhs[2][2];
-	lhs[3][2]=lhs[3][2]*pivot;
-	lhs[4][2]=lhs[4][2]*pivot;
-	c[0][2]=c[0][2]*pivot;
-	c[1][2]=c[1][2]*pivot;
-	c[2][2]=c[2][2]*pivot;
-	c[3][2]=c[3][2]*pivot;
-	c[4][2]=c[4][2]*pivot;
-	r[2]=r[2]*pivot;
-	/* */
-	coeff=lhs[2][0];
-	lhs[3][0]=lhs[3][0]-coeff*lhs[3][2];
-	lhs[4][0]=lhs[4][0]-coeff*lhs[4][2];
-	c[0][0]=c[0][0]-coeff*c[0][2];
-	c[1][0]=c[1][0]-coeff*c[1][2];
-	c[2][0]=c[2][0]-coeff*c[2][2];
-	c[3][0]=c[3][0]-coeff*c[3][2];
-	c[4][0]=c[4][0]-coeff*c[4][2];
-	r[0]=r[0]-coeff*r[2];
-	/* */
-	coeff=lhs[2][1];
-	lhs[3][1]=lhs[3][1]-coeff*lhs[3][2];
-	lhs[4][1]=lhs[4][1]-coeff*lhs[4][2];
-	c[0][1]=c[0][1]-coeff*c[0][2];
-	c[1][1]=c[1][1]-coeff*c[1][2];
-	c[2][1]=c[2][1]-coeff*c[2][2];
-	c[3][1]=c[3][1]-coeff*c[3][2];
-	c[4][1]=c[4][1]-coeff*c[4][2];
-	r[1]=r[1]-coeff*r[2];
-	/* */
-	coeff=lhs[2][3];
-	lhs[3][3]=lhs[3][3]-coeff*lhs[3][2];
-	lhs[4][3]=lhs[4][3]-coeff*lhs[4][2];
-	c[0][3]=c[0][3]-coeff*c[0][2];
-	c[1][3]=c[1][3]-coeff*c[1][2];
-	c[2][3]=c[2][3]-coeff*c[2][2];
-	c[3][3]=c[3][3]-coeff*c[3][2];
-	c[4][3]=c[4][3]-coeff*c[4][2];
-	r[3]=r[3]-coeff*r[2];
-	/* */
-	coeff=lhs[2][4];
-	lhs[3][4]=lhs[3][4]-coeff*lhs[3][2];
-	lhs[4][4]=lhs[4][4]-coeff*lhs[4][2];
-	c[0][4]=c[0][4]-coeff*c[0][2];
-	c[1][4]=c[1][4]-coeff*c[1][2];
-	c[2][4]=c[2][4]-coeff*c[2][2];
-	c[3][4]=c[3][4]-coeff*c[3][2];
-	c[4][4]=c[4][4]-coeff*c[4][2];
-	r[4]=r[4]-coeff*r[2];
-	/* */
-	pivot=1.00/lhs[3][3];
-	lhs[4][3]=lhs[4][3]*pivot;
-	c[0][3]=c[0][3]*pivot;
-	c[1][3]=c[1][3]*pivot;
-	c[2][3]=c[2][3]*pivot;
-	c[3][3]=c[3][3]*pivot;
-	c[4][3]=c[4][3]*pivot;
-	r[3]=r[3] *pivot;
-	/* */
-	coeff=lhs[3][0];
-	lhs[4][0]=lhs[4][0]-coeff*lhs[4][3];
-	c[0][0]=c[0][0]-coeff*c[0][3];
-	c[1][0]=c[1][0]-coeff*c[1][3];
-	c[2][0]=c[2][0]-coeff*c[2][3];
-	c[3][0]=c[3][0]-coeff*c[3][3];
-	c[4][0]=c[4][0]-coeff*c[4][3];
-	r[0]=r[0]-coeff*r[3];
-	/* */
-	coeff=lhs[3][1];
-	lhs[4][1]=lhs[4][1]-coeff*lhs[4][3];
-	c[0][1]=c[0][1]-coeff*c[0][3];
-	c[1][1]=c[1][1]-coeff*c[1][3];
-	c[2][1]=c[2][1]-coeff*c[2][3];
-	c[3][1]=c[3][1]-coeff*c[3][3];
-	c[4][1]=c[4][1]-coeff*c[4][3];
-	r[1]=r[1]-coeff*r[3];
-	/* */
-	coeff=lhs[3][2];
-	lhs[4][2]=lhs[4][2]-coeff*lhs[4][3];
-	c[0][2]=c[0][2]-coeff*c[0][3];
-	c[1][2]=c[1][2]-coeff*c[1][3];
-	c[2][2]=c[2][2]-coeff*c[2][3];
-	c[3][2]=c[3][2]-coeff*c[3][3];
-	c[4][2]=c[4][2]-coeff*c[4][3];
-	r[2]=r[2]-coeff*r[3];
-	/* */
-	coeff=lhs[3][4];
-	lhs[4][4]=lhs[4][4]-coeff*lhs[4][3];
-	c[0][4]=c[0][4]-coeff*c[0][3];
-	c[1][4]=c[1][4]-coeff*c[1][3];
-	c[2][4]=c[2][4]-coeff*c[2][3];
-	c[3][4]=c[3][4]-coeff*c[3][3];
-	c[4][4]=c[4][4]-coeff*c[4][3];
-	r[4]=r[4]-coeff*r[3];
-	/* */
-	pivot=1.00/lhs[4][4];
-	c[0][4]=c[0][4]*pivot;
-	c[1][4]=c[1][4]*pivot;
-	c[2][4]=c[2][4]*pivot;
-	c[3][4]=c[3][4]*pivot;
-	c[4][4]=c[4][4]*pivot;
-	r[4]=r[4]*pivot;
-	/* */
-	coeff=lhs[4][0];
-	c[0][0]=c[0][0]-coeff*c[0][4];
-	c[1][0]=c[1][0]-coeff*c[1][4];
-	c[2][0]=c[2][0]-coeff*c[2][4];
-	c[3][0]=c[3][0]-coeff*c[3][4];
-	c[4][0]=c[4][0]-coeff*c[4][4];
-	r[0]=r[0]-coeff*r[4];
-	/* */
-	coeff=lhs[4][1];
-	c[0][1]=c[0][1]-coeff*c[0][4];
-	c[1][1]=c[1][1]-coeff*c[1][4];
-	c[2][1]=c[2][1]-coeff*c[2][4];
-	c[3][1]=c[3][1]-coeff*c[3][4];
-	c[4][1]=c[4][1]-coeff*c[4][4];
-	r[1]=r[1]-coeff*r[4];
-	/* */
-	coeff=lhs[4][2];
-	c[0][2]=c[0][2]-coeff*c[0][4];
-	c[1][2]=c[1][2]-coeff*c[1][4];
-	c[2][2]=c[2][2]-coeff*c[2][4];
-	c[3][2]=c[3][2]-coeff*c[3][4];
-	c[4][2]=c[4][2]-coeff*c[4][4];
-	r[2]=r[2]-coeff*r[4];
-	/* */
-	coeff=lhs[4][3];
-	c[0][3]=c[0][3]-coeff*c[0][4];
-	c[1][3]=c[1][3]-coeff*c[1][4];
-	c[2][3]=c[2][3]-coeff*c[2][4];
-	c[3][3]=c[3][3]-coeff*c[3][4];
-	c[4][3]=c[4][3]-coeff*c[4][4];
-	r[3]=r[3]-coeff*r[4];
+	for (int k = 0; k < 5; k++)
+	{
+		pivot=1.00/lhs[k][k];
+		for (int i = k+1; i < 5; i++)
+			lhs[i][k]=lhs[i][k]*pivot;
+		for (int i = 0; i < 5; i++)
+			c[i][k]=c[i][k]*pivot;
+		r[k]=r[k]*pivot;
+
+		for (int j = 0; j < 5; j++)
+		{
+			if (j != k){
+				coeff=lhs[k][j];
+				for (int i = k+1; i < 5; i++)
+					lhs[i][j]=lhs[i][j]-coeff*lhs[i][k];
+
+				for (int i = 0; i < 5; i++)
+					c[i][j]=c[i][j]-coeff*c[i][k];
+				r[j]=r[j]-coeff*r[k];
+			}
+		}
+	}
 }
+
+
 
 void binvrhs(double lhs[5][5], double r[5]){
 	double pivot, coeff;
