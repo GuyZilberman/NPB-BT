@@ -96,9 +96,9 @@ static double cuf[PROBLEM_SIZE+1];
 static double q[PROBLEM_SIZE+1];
 static double ue[5][PROBLEM_SIZE+1];
 static double buf[5][PROBLEM_SIZE+1];
-static double fjac[PROBLEM_SIZE+1][5][5];
-static double njac[PROBLEM_SIZE+1][5][5];
-static double lhs[PROBLEM_SIZE+1][3][5][5];
+static double fjac[PROBLEM_SIZE+1][PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5];
+static double njac[PROBLEM_SIZE+1][PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5];
+static double lhs[PROBLEM_SIZE+1][PROBLEM_SIZE+1][PROBLEM_SIZE+1][3][5][5];
 static double ce[13][5];
 #else
 static double (*us)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_device(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
@@ -112,6 +112,8 @@ static double (*forcing)[JMAXP+1][IMAXP+1][5]=(double(*)[JMAXP+1][IMAXP+1][5])om
 static double (*forcing_d)[JMAXP+1][IMAXP+1][5]=(double(*)[JMAXP+1][IMAXP+1][5])omp_target_alloc_device(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)*(5)), 0);
 
 static double (*u)[JMAXP+1][IMAXP+1][5]=(double(*)[JMAXP+1][IMAXP+1][5])omp_target_alloc_shared(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)*(5)), 0);
+static double (*u_d)[JMAXP+1][IMAXP+1][5]=(double(*)[JMAXP+1][IMAXP+1][5])omp_target_alloc_device(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)*(5)), 0);
+
 static double (*rhs)[JMAXP+1][IMAXP+1][5]=(double(*)[JMAXP+1][IMAXP+1][5])omp_target_alloc_shared(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)*(5)), 0);
 static double (*cuf)=(double*)malloc(sizeof(double)*(PROBLEM_SIZE+1));
 static double (*q)=(double*)malloc(sizeof(double)*(PROBLEM_SIZE+1));
