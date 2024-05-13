@@ -260,11 +260,9 @@ int main(int argc, char* argv[]){
 	}
 	for(i=1;i<=T_LAST;i++){timer_clear(i);}
 	timer_start(1);
-	// #pragma omp parallel firstprivate(niter) private(step)
 	{
 		for(step=1; step<=niter; step++){
 			if((step%20)==0||step==1){
-				// #pragma omp master
 					printf(" Time step %4d\n",step);
 			}
 			adi();
@@ -354,29 +352,7 @@ int main(int argc, char* argv[]){
  * addition of update to the vector u
  * ---------------------------------------------------------------------
  */
-void add_orig(){
-	int i, j, k, m;
-	int thread_id = omp_get_thread_num();
-
-	if(timeron && thread_id==0){timer_start(T_ADD);}
-	#pragma omp for
-	for(k=1; k<=grid_points[2]-2; k++){
-		for(j=1; j<=grid_points[1]-2; j++){
-			for(i=1; i<=grid_points[0]-2; i++){
-				for(m=0; m<5; m++){
-					u[k][j][i][m]=u[k][j][i][m]+rhs[k][j][i][m];
-				}
-			}
-		}
-	}
-	if(timeron && thread_id==0){timer_stop(T_ADD);}
-}
-
-void add_gpu(){
-// The barrier at the end of the single is expensive and not needed since you get the barrier at the end of the
-// parallel region. So use nowait to turn it off.
-// #pragma omp single nowait
-//     {
+void add(){
     int thread_id = omp_get_thread_num();
 	if(timeron && thread_id==0){timer_start(T_ADD);}
     #pragma omp target teams distribute parallel for collapse(3) 
@@ -390,12 +366,6 @@ void add_gpu(){
             }
         }
     if(timeron && thread_id==0){timer_stop(T_ADD);}
-    // }
-}
-
-
-void add(){
-    add_gpu();
 }
 
 void adi(){
@@ -412,7 +382,7 @@ void adi(){
     }
 }
 
-void binvcrhs_long(double lhs[5][5], double c[5][5], double r[5]){
+void binvcrhs(double lhs[5][5], double c[5][5], double r[5]){
 	double pivot, coeff;
 	pivot=1.00/lhs[0][0];
 	lhs[1][0]=lhs[1][0]*pivot;
@@ -665,38 +635,6 @@ void binvcrhs_long(double lhs[5][5], double c[5][5], double r[5]){
 	r[3]=r[3]-coeff*r[4];
 }
 
-void binvcrhs_guy(double lhs[5][5], double c[5][5], double r[5]) {
-	double pivot, coeff;
-	for (int k = 0; k < 5; k++)
-	{
-		pivot=1.00/lhs[k][k];
-        // #pragma omp parallel for default(none) shared(lhs, c, r, k, pivot)
-		for (int i = k+1; i < 5; i++)
-			lhs[i][k]=lhs[i][k]*pivot;
-        // #pragma omp parallel for default(none) shared(c, k, pivot)
-		for (int i = 0; i < 5; i++)
-			c[i][k]=c[i][k]*pivot;
-		r[k]=r[k]*pivot;
-
-		for (int j = 0; j < 5; j++)
-		{
-			if (j != k){
-				coeff=lhs[k][j];
-				for (int i = k+1; i < 5; i++)
-					lhs[i][j]=lhs[i][j]-coeff*lhs[i][k];
-
-				for (int i = 0; i < 5; i++)
-					c[i][j]=c[i][j]-coeff*c[i][k];
-				r[j]=r[j]-coeff*r[k];
-			}
-		}
-	}
-}
-
-void binvcrhs(double lhs[5][5], double c[5][5], double r[5]){
-    binvcrhs_long(lhs, c, r);
-}
-
 void binvrhs(double lhs[5][5], double r[5]){
 	double pivot, coeff;
 	pivot=1.00/lhs[0][0];
@@ -826,8 +764,6 @@ void binvrhs(double lhs[5][5], double r[5]){
 }
 
 void compute_rhs(){
-    // #pragma omp single
-    // {
         int i, j, k, m;
     	double rho_inv, uijk, up1, um1, vijk, vp1, vm1, wijk, wp1, wm1;
     	int thread_id = omp_get_thread_num();
@@ -1060,9 +996,7 @@ void compute_rhs(){
     	 * ---------------------------------------------------------------------
     	 * compute zeta-direction fluxes 
     	 * ---------------------------------------------------------------------
-    	 */
-    	// #pragma omp for
-    
+    	 */    
         #pragma omp target teams distribute parallel for collapse(3)
     	for(k=1; k<=grid_points[2]-2; k++){
     		for(j=1; j<=grid_points[1]-2; j++){
@@ -1153,7 +1087,6 @@ void compute_rhs(){
     	}
     
     	if(timeron && thread_id==0){timer_stop(T_RHSZ);}
-    	//#pragma omp for
         #pragma omp target teams distribute parallel for collapse(3) 
         for(k=1; k<=grid_points[2]-2; k++){
             for(j=1; j<=grid_points[1]-2; j++){
@@ -1165,7 +1098,6 @@ void compute_rhs(){
             }
         }
         if(timeron && thread_id==0){timer_stop(T_RHS);}
-    // }
 }
 
 /*
@@ -1712,18 +1644,6 @@ void lhsinit(double lhs[][3][5][5], int size){
 		lhs[0][1][m][m]=1.0;
 		lhs[i][1][m][m]=1.0;
 	}
-
- //    // TODO guy - tried it and got SLIGHTLY worse performance. can try again later
- //    for(m=0; m<5; m++){
-	// 	for(n=0; n<5; n++){		
-	// 		lhs[0][0][n][m]=0.0;
-	// 		lhs[0][1][n][m]=(m==n)?1.0:0.0;
-	// 		lhs[0][2][n][m]=0.0;
-	// 		lhs[i][0][n][m]=0.0;
-	// 		lhs[i][1][n][m]=(m==n)?1.0:0.0;
-	// 		lhs[i][2][n][m]=0.0;
-	// 	}
-	// }
     
 }
 
@@ -2424,8 +2344,6 @@ void verify(int no_time_steps, char* class_npb, boolean* verified){
  * ---------------------------------------------------------------------
  */
 void x_solve(){
-    // #pragma omp single
-    // {
     	int i, j, k, m, n, isize;
     	int thread_id = omp_get_thread_num();
     
@@ -2441,12 +2359,8 @@ void x_solve(){
     	 * determine a (labeled f) and n jacobians
     	 * ---------------------------------------------------------------------
     	 */
-    
-        // double fjac[PROBLEM_SIZE+1][PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5];
-        // double njac[PROBLEM_SIZE+1][PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5];
         double tmp1, tmp2, tmp3;
 
-    	// #pragma omp for collapse
         #pragma omp target teams distribute parallel for collapse(2)
     	for(k=1; k<=grid_points[2]-2; k++){
     		for(j=1; j<=grid_points[1]-2; j++){
@@ -2510,7 +2424,7 @@ void x_solve(){
     			}
     			/*
     			 * ---------------------------------------------------------------------
-    			 * now jac_guy[k][j]obians set, so form left hand side in x direction
+    			 * now jacobians set, so form left hand side in x direction
     			 * ---------------------------------------------------------------------
     			 */
     			for(i=1; i<=isize-1; i++){
@@ -2683,7 +2597,6 @@ void x_solve(){
 
 
         #pragma omp target teams distribute parallel for collapse(2)
-        // #pragma omp for 
     	for(k=1; k<=grid_points[2]-2; k++){
     		for(j=1; j<=grid_points[1]-2; j++){ 
     			binvcrhs(lhs[k][j][0][BB], lhs[k][j][0][CC], rhs[k][j][0]);
@@ -2695,7 +2608,6 @@ void x_solve(){
             } 
         }
         
-        // #pragma omp for collapse(2)
         #pragma omp target teams distribute parallel for collapse(2)
     	for(k=1; k<=grid_points[2]-2; k++){
     		for(j=1; j<=grid_points[1]-2; j++){ 
@@ -2703,12 +2615,11 @@ void x_solve(){
     			matmul_sub(lhs[k][j][isize][AA], lhs[k][j][isize-1][CC], lhs[k][j][isize][BB]);
     			binvrhs(lhs[k][j][isize][BB], rhs[k][j][isize]);
     
-           } //?
-        } //?
+           }
+        }
         #pragma omp target teams distribute parallel for collapse(2)
-        // #pragma omp for collapse(2)
-    	for(k=1; k<=grid_points[2]-2; k++){ //?
-    		for(j=1; j<=grid_points[1]-2; j++){ //?
+    	for(k=1; k<=grid_points[2]-2; k++){
+    		for(j=1; j<=grid_points[1]-2; j++){
     			for(i=isize-1; i>=0; i--){
     				for(m=0; m<BLOCK_SIZE; m++){
     					for(n=0; n<BLOCK_SIZE; n++){
@@ -2719,7 +2630,6 @@ void x_solve(){
     		}
     	}
         if(timeron && thread_id==0){timer_stop(T_XSOLVE);}
-    // }
 }
 
 /*
@@ -2734,297 +2644,290 @@ void x_solve(){
  * ---------------------------------------------------------------------
  */
 void y_solve(){
-	// #pragma omp single
- //    {
-    	int i, j, k, m, n, jsize;
-    	int thread_id = omp_get_thread_num();
+    int i, j, k, m, n, jsize;
+    int thread_id = omp_get_thread_num();
+
+    if(timeron && thread_id==0){timer_start(T_YSOLVE);}
+    /*
+     * ---------------------------------------------------------------------
+     * this function computes the left hand side for the three y-factors   
+     * ---------------------------------------------------------------------
+     */
+    jsize=grid_points[1]-1;
+    /*
+     * ---------------------------------------------------------------------
+     * compute the indices for storing the tri-diagonal matrix;
+     * determine a (labeled f) and n jacobians for cell c
+     * ---------------------------------------------------------------------
+     */
+    double tmp1, tmp2, tmp3;
+
+    #pragma omp target teams distribute parallel for collapse(2)
+    for(k=1; k<=grid_points[2]-2; k++){
+        for(i=1; i<=grid_points[0]-2; i++){
+            for(j=0; j<=jsize; j++){
+                tmp1=rho_i[k][j][i];
+                tmp2=tmp1*tmp1;
+                tmp3=tmp1*tmp2;
+                fjac[k][i][j][0][0]=0.0;
+                fjac[k][i][j][1][0]=0.0;
+                fjac[k][i][j][2][0]=1.0;
+                fjac[k][i][j][3][0]=0.0;
+                fjac[k][i][j][4][0]=0.0;
+                fjac[k][i][j][0][1]=-(u[k][j][i][1]*u[k][j][i][2])*tmp2;
+                fjac[k][i][j][1][1]=u[k][j][i][2]*tmp1;
+                fjac[k][i][j][2][1]=u[k][j][i][1]*tmp1;
+                fjac[k][i][j][3][1]=0.0;
+                fjac[k][i][j][4][1]=0.0;
+                fjac[k][i][j][0][2]=-(u[k][j][i][2]*u[k][j][i][2]*tmp2)+c2*qs[k][j][i];
+                fjac[k][i][j][1][2]=-c2*u[k][j][i][1]*tmp1;
+                fjac[k][i][j][2][2]=(2.0-c2)*u[k][j][i][2]*tmp1;
+                fjac[k][i][j][3][2]=-c2*u[k][j][i][3]*tmp1;
+                fjac[k][i][j][4][2]=c2;
+                fjac[k][i][j][0][3]=-(u[k][j][i][2]*u[k][j][i][3])*tmp2;
+                fjac[k][i][j][1][3]=0.0;
+                fjac[k][i][j][2][3]=u[k][j][i][3]*tmp1;
+                fjac[k][i][j][3][3]=u[k][j][i][2]*tmp1;
+                fjac[k][i][j][4][3]=0.0;
+                fjac[k][i][j][0][4]=(c2*2.0*square[k][j][i]-c1*u[k][j][i][4])*u[k][j][i][2]*tmp2;
+                fjac[k][i][j][1][4]=-c2*u[k][j][i][1]*u[k][j][i][2]*tmp2;
+                fjac[k][i][j][2][4]=c1*u[k][j][i][4]*tmp1-c2*(qs[k][j][i]+u[k][j][i][2]*u[k][j][i][2]*tmp2);
+                fjac[k][i][j][3][4]=-c2*(u[k][j][i][2]*u[k][j][i][3])*tmp2;
+                fjac[k][i][j][4][4]=c1*u[k][j][i][2]*tmp1;
+                njac[k][i][j][0][0]=0.0;
+                njac[k][i][j][1][0]=0.0;
+                njac[k][i][j][2][0]=0.0;
+                njac[k][i][j][3][0]=0.0;
+                njac[k][i][j][4][0]=0.0;
+                njac[k][i][j][0][1]=-c3c4*tmp2*u[k][j][i][1];
+                njac[k][i][j][1][1]=c3c4*tmp1;
+                njac[k][i][j][2][1]=0.0;
+                njac[k][i][j][3][1]=0.0;
+                njac[k][i][j][4][1]=0.0;
+                njac[k][i][j][0][2]=-con43*c3c4*tmp2*u[k][j][i][2];
+                njac[k][i][j][1][2]=0.0;
+                njac[k][i][j][2][2]=con43*c3c4*tmp1;
+                njac[k][i][j][3][2]=0.0;
+                njac[k][i][j][4][2]=0.0;
+                njac[k][i][j][0][3]=-c3c4*tmp2*u[k][j][i][3];
+                njac[k][i][j][1][3]=0.0;
+                njac[k][i][j][2][3]=0.0;
+                njac[k][i][j][3][3]=c3c4*tmp1;
+                njac[k][i][j][4][3]=0.0;
+                njac[k][i][j][0][4]=-(c3c4-c1345)*tmp3*(u[k][j][i][1]*u[k][j][i][1])
+                    -(con43*c3c4-c1345)*tmp3*(u[k][j][i][2]*u[k][j][i][2])
+                    -(c3c4-c1345)*tmp3*(u[k][j][i][3]*u[k][j][i][3])
+                    -c1345*tmp2*u[k][j][i][4];
+                njac[k][i][j][1][4]=(c3c4-c1345)*tmp2*u[k][j][i][1];
+                njac[k][i][j][2][4]=(con43*c3c4-c1345)*tmp2*u[k][j][i][2];
+                njac[k][i][j][3][4]=(c3c4-c1345)*tmp2*u[k][j][i][3];
+                njac[k][i][j][4][4]=(c1345)*tmp1;
+            }
+            /*
+             * ---------------------------------------------------------------------
+             * now joacobians set, so form left hand side in y direction
+             * ---------------------------------------------------------------------
+             */
+            for(j=1; j<=jsize-1; j++){
+                tmp1=dt*ty1;
+                tmp2=dt*ty2;
+                lhs[k][i][j][AA][0][0]=-tmp2*fjac[k][i][j-1][0][0]
+                    -tmp1*njac[k][i][j-1][0][0]
+                    -tmp1*dy1; 
+                lhs[k][i][j][AA][1][0]=-tmp2*fjac[k][i][j-1][1][0]
+                    -tmp1*njac[k][i][j-1][1][0];
+                lhs[k][i][j][AA][2][0]=-tmp2*fjac[k][i][j-1][2][0]
+                    -tmp1*njac[k][i][j-1][2][0];
+                lhs[k][i][j][AA][3][0]=-tmp2*fjac[k][i][j-1][3][0]
+                    -tmp1*njac[k][i][j-1][3][0];
+                lhs[k][i][j][AA][4][0]=-tmp2*fjac[k][i][j-1][4][0]
+                    -tmp1*njac[k][i][j-1][4][0];
+                lhs[k][i][j][AA][0][1]=-tmp2*fjac[k][i][j-1][0][1]
+                    -tmp1*njac[k][i][j-1][0][1];
+                lhs[k][i][j][AA][1][1]=-tmp2*fjac[k][i][j-1][1][1]
+                    -tmp1*njac[k][i][j-1][1][1]
+                    -tmp1*dy2;
+                lhs[k][i][j][AA][2][1]=-tmp2*fjac[k][i][j-1][2][1]
+                    -tmp1*njac[k][i][j-1][2][1];
+                lhs[k][i][j][AA][3][1]=-tmp2*fjac[k][i][j-1][3][1]
+                    -tmp1*njac[k][i][j-1][3][1];
+                lhs[k][i][j][AA][4][1]=-tmp2*fjac[k][i][j-1][4][1]
+                    -tmp1*njac[k][i][j-1][4][1];
+                lhs[k][i][j][AA][0][2]=-tmp2*fjac[k][i][j-1][0][2]
+                    -tmp1*njac[k][i][j-1][0][2];
+                lhs[k][i][j][AA][1][2]=-tmp2*fjac[k][i][j-1][1][2]
+                    -tmp1*njac[k][i][j-1][1][2];
+                lhs[k][i][j][AA][2][2]=-tmp2*fjac[k][i][j-1][2][2]
+                    -tmp1*njac[k][i][j-1][2][2]
+                    -tmp1*dy3;
+                lhs[k][i][j][AA][3][2]=-tmp2*fjac[k][i][j-1][3][2]
+                    -tmp1*njac[k][i][j-1][3][2];
+                lhs[k][i][j][AA][4][2]=-tmp2*fjac[k][i][j-1][4][2]
+                    -tmp1*njac[k][i][j-1][4][2];
+                lhs[k][i][j][AA][0][3]=-tmp2*fjac[k][i][j-1][0][3]
+                    -tmp1*njac[k][i][j-1][0][3];
+                lhs[k][i][j][AA][1][3]=-tmp2*fjac[k][i][j-1][1][3]
+                    -tmp1*njac[k][i][j-1][1][3];
+                lhs[k][i][j][AA][2][3]=-tmp2*fjac[k][i][j-1][2][3]
+                    -tmp1*njac[k][i][j-1][2][3];
+                lhs[k][i][j][AA][3][3]=-tmp2*fjac[k][i][j-1][3][3]
+                    -tmp1*njac[k][i][j-1][3][3]
+                    -tmp1*dy4;
+                lhs[k][i][j][AA][4][3]=-tmp2*fjac[k][i][j-1][4][3]
+                    -tmp1*njac[k][i][j-1][4][3];
+                lhs[k][i][j][AA][0][4]=-tmp2*fjac[k][i][j-1][0][4]
+                    -tmp1*njac[k][i][j-1][0][4];
+                lhs[k][i][j][AA][1][4]=-tmp2*fjac[k][i][j-1][1][4]
+                    -tmp1*njac[k][i][j-1][1][4];
+                lhs[k][i][j][AA][2][4]=-tmp2*fjac[k][i][j-1][2][4]
+                    -tmp1*njac[k][i][j-1][2][4];
+                lhs[k][i][j][AA][3][4]=-tmp2*fjac[k][i][j-1][3][4]
+                    -tmp1*njac[k][i][j-1][3][4];
+                lhs[k][i][j][AA][4][4]=-tmp2*fjac[k][i][j-1][4][4]
+                    -tmp1*njac[k][i][j-1][4][4]
+                    -tmp1*dy5;
+                lhs[k][i][j][BB][0][0]=1.0
+                    +tmp1*2.0*njac[k][i][j][0][0]
+                    +tmp1*2.0*dy1;
+                lhs[k][i][j][BB][1][0]=tmp1*2.0*njac[k][i][j][1][0];
+                lhs[k][i][j][BB][2][0]=tmp1*2.0*njac[k][i][j][2][0];
+                lhs[k][i][j][BB][3][0]=tmp1*2.0*njac[k][i][j][3][0];
+                lhs[k][i][j][BB][4][0]=tmp1*2.0*njac[k][i][j][4][0];
+                lhs[k][i][j][BB][0][1]=tmp1*2.0*njac[k][i][j][0][1];
+                lhs[k][i][j][BB][1][1]=1.0
+                    +tmp1*2.0*njac[k][i][j][1][1]
+                    +tmp1*2.0*dy2;
+                lhs[k][i][j][BB][2][1]=tmp1*2.0*njac[k][i][j][2][1];
+                lhs[k][i][j][BB][3][1]=tmp1*2.0*njac[k][i][j][3][1];
+                lhs[k][i][j][BB][4][1]=tmp1*2.0*njac[k][i][j][4][1];
+                lhs[k][i][j][BB][0][2]=tmp1*2.0*njac[k][i][j][0][2];
+                lhs[k][i][j][BB][1][2]=tmp1*2.0*njac[k][i][j][1][2];
+                lhs[k][i][j][BB][2][2]=1.0
+                    +tmp1*2.0*njac[k][i][j][2][2]
+                    +tmp1*2.0*dy3;
+                lhs[k][i][j][BB][3][2]=tmp1*2.0*njac[k][i][j][3][2];
+                lhs[k][i][j][BB][4][2]=tmp1*2.0*njac[k][i][j][4][2];
+                lhs[k][i][j][BB][0][3]=tmp1*2.0*njac[k][i][j][0][3];
+                lhs[k][i][j][BB][1][3]=tmp1*2.0*njac[k][i][j][1][3];
+                lhs[k][i][j][BB][2][3]=tmp1*2.0*njac[k][i][j][2][3];
+                lhs[k][i][j][BB][3][3]=1.0
+                    +tmp1*2.0*njac[k][i][j][3][3]
+                    +tmp1*2.0*dy4;
+                lhs[k][i][j][BB][4][3]=tmp1*2.0*njac[k][i][j][4][3];
+                lhs[k][i][j][BB][0][4]=tmp1*2.0*njac[k][i][j][0][4];
+                lhs[k][i][j][BB][1][4]=tmp1*2.0*njac[k][i][j][1][4];
+                lhs[k][i][j][BB][2][4]=tmp1*2.0*njac[k][i][j][2][4];
+                lhs[k][i][j][BB][3][4]=tmp1*2.0*njac[k][i][j][3][4];
+                lhs[k][i][j][BB][4][4]=1.0
+                    +tmp1*2.0*njac[k][i][j][4][4] 
+                    +tmp1*2.0*dy5;
+                lhs[k][i][j][CC][0][0]=tmp2*fjac[k][i][j+1][0][0]
+                    -tmp1*njac[k][i][j+1][0][0]
+                    -tmp1*dy1;
+                lhs[k][i][j][CC][1][0]=tmp2*fjac[k][i][j+1][1][0]
+                    -tmp1*njac[k][i][j+1][1][0];
+                lhs[k][i][j][CC][2][0]=tmp2*fjac[k][i][j+1][2][0]
+                    -tmp1*njac[k][i][j+1][2][0];
+                lhs[k][i][j][CC][3][0]=tmp2*fjac[k][i][j+1][3][0]
+                    -tmp1*njac[k][i][j+1][3][0];
+                lhs[k][i][j][CC][4][0]=tmp2*fjac[k][i][j+1][4][0]
+                    -tmp1*njac[k][i][j+1][4][0];
+                lhs[k][i][j][CC][0][1]=tmp2*fjac[k][i][j+1][0][1]
+                    -tmp1*njac[k][i][j+1][0][1];
+                lhs[k][i][j][CC][1][1]=tmp2*fjac[k][i][j+1][1][1]
+                    -tmp1*njac[k][i][j+1][1][1]
+                    -tmp1*dy2;
+                lhs[k][i][j][CC][2][1]=tmp2*fjac[k][i][j+1][2][1]
+                    -tmp1*njac[k][i][j+1][2][1];
+                lhs[k][i][j][CC][3][1]=tmp2*fjac[k][i][j+1][3][1]
+                    -tmp1*njac[k][i][j+1][3][1];
+                lhs[k][i][j][CC][4][1]=tmp2*fjac[k][i][j+1][4][1]
+                    -tmp1*njac[k][i][j+1][4][1];
+                lhs[k][i][j][CC][0][2]=tmp2*fjac[k][i][j+1][0][2]
+                    -tmp1*njac[k][i][j+1][0][2];
+                lhs[k][i][j][CC][1][2]=tmp2*fjac[k][i][j+1][1][2]
+                    -tmp1*njac[k][i][j+1][1][2];
+                lhs[k][i][j][CC][2][2]=tmp2*fjac[k][i][j+1][2][2]
+                    -tmp1*njac[k][i][j+1][2][2]
+                    -tmp1*dy3;
+                lhs[k][i][j][CC][3][2]=tmp2*fjac[k][i][j+1][3][2]
+                    -tmp1*njac[k][i][j+1][3][2];
+                lhs[k][i][j][CC][4][2]=tmp2*fjac[k][i][j+1][4][2]
+                    -tmp1*njac[k][i][j+1][4][2];
+                lhs[k][i][j][CC][0][3]=tmp2*fjac[k][i][j+1][0][3]
+                    -tmp1*njac[k][i][j+1][0][3];
+                lhs[k][i][j][CC][1][3]=tmp2*fjac[k][i][j+1][1][3]
+                    -tmp1*njac[k][i][j+1][1][3];
+                lhs[k][i][j][CC][2][3]=tmp2*fjac[k][i][j+1][2][3]
+                    -tmp1*njac[k][i][j+1][2][3];
+                lhs[k][i][j][CC][3][3]=tmp2*fjac[k][i][j+1][3][3]
+                    -tmp1*njac[k][i][j+1][3][3]
+                    -tmp1*dy4;
+                lhs[k][i][j][CC][4][3]=tmp2*fjac[k][i][j+1][4][3]
+                    -tmp1*njac[k][i][j+1][4][3];
+                lhs[k][i][j][CC][0][4]=tmp2*fjac[k][i][j+1][0][4]
+                    -tmp1*njac[k][i][j+1][0][4];
+                lhs[k][i][j][CC][1][4]=tmp2*fjac[k][i][j+1][1][4]
+                    -tmp1*njac[k][i][j+1][1][4];
+                lhs[k][i][j][CC][2][4]=tmp2*fjac[k][i][j+1][2][4]
+                    -tmp1*njac[k][i][j+1][2][4];
+                lhs[k][i][j][CC][3][4]=tmp2*fjac[k][i][j+1][3][4]
+                    -tmp1*njac[k][i][j+1][3][4];
+                lhs[k][i][j][CC][4][4]=tmp2*fjac[k][i][j+1][4][4]
+                    -tmp1*njac[k][i][j+1][4][4]
+                    -tmp1*dy5;
+            }
+            /*
+             * ---------------------------------------------------------------------
+             * performs guaussian elimination on this cell.
+             *
+             * assumes that unpacking routines for non-first cells 
+             * preload c' and rhs' from previous cell.
+             * 
+             * assumed send happens outside this routine, but that
+             * c'(JMAX) and rhs'(JMAX) will be sent to next cell
+             * ---------------------------------------------------------------------
+             * multiply c(i,0,k) by b_inverse and copy back to c
+             * multiply rhs(0) by b_inverse(0) and copy to rhs
+             * ---------------------------------------------------------------------
+             */
+        }
+    }
+
+    #pragma omp target teams distribute parallel for collapse(2)
+    for(k=1; k<=grid_points[2]-2; k++){
+        for(i=1; i<=grid_points[0]-2; i++){
+            binvcrhs(lhs[k][i][0][BB], lhs[k][i][0][CC], rhs[k][0][i]);
+            for(j=1; j<=jsize-1; j++){
+                matvec_sub(lhs[k][i][j][AA], rhs[k][j-1][i], rhs[k][j][i]);
+                matmul_sub(lhs[k][i][j][AA], lhs[k][i][j-1][CC], lhs[k][i][j][BB]);
+                binvcrhs(lhs[k][i][j][BB], lhs[k][i][j][CC], rhs[k][j][i]);
+            }
+        }
+    }
     
-    	if(timeron && thread_id==0){timer_start(T_YSOLVE);}
-    	/*
-    	 * ---------------------------------------------------------------------
-    	 * this function computes the left hand side for the three y-factors   
-    	 * ---------------------------------------------------------------------
-    	 */
-    	jsize=grid_points[1]-1;
-    	/*
-    	 * ---------------------------------------------------------------------
-    	 * compute the indices for storing the tri-diagonal matrix;
-    	 * determine a (labeled f) and n jacobians for cell c
-    	 * ---------------------------------------------------------------------
-    	 */
-    	double tmp1, tmp2, tmp3;
-	
-        #pragma omp target teams distribute parallel for collapse(2)
-        // #pragma omp for
-		for(k=1; k<=grid_points[2]-2; k++){
-			for(i=1; i<=grid_points[0]-2; i++){
-				for(j=0; j<=jsize; j++){
-					tmp1=rho_i[k][j][i];
-					tmp2=tmp1*tmp1;
-					tmp3=tmp1*tmp2;
-					fjac[k][i][j][0][0]=0.0;
-					fjac[k][i][j][1][0]=0.0;
-					fjac[k][i][j][2][0]=1.0;
-					fjac[k][i][j][3][0]=0.0;
-					fjac[k][i][j][4][0]=0.0;
-					fjac[k][i][j][0][1]=-(u[k][j][i][1]*u[k][j][i][2])*tmp2;
-					fjac[k][i][j][1][1]=u[k][j][i][2]*tmp1;
-					fjac[k][i][j][2][1]=u[k][j][i][1]*tmp1;
-					fjac[k][i][j][3][1]=0.0;
-					fjac[k][i][j][4][1]=0.0;
-					fjac[k][i][j][0][2]=-(u[k][j][i][2]*u[k][j][i][2]*tmp2)+c2*qs[k][j][i];
-					fjac[k][i][j][1][2]=-c2*u[k][j][i][1]*tmp1;
-					fjac[k][i][j][2][2]=(2.0-c2)*u[k][j][i][2]*tmp1;
-					fjac[k][i][j][3][2]=-c2*u[k][j][i][3]*tmp1;
-					fjac[k][i][j][4][2]=c2;
-					fjac[k][i][j][0][3]=-(u[k][j][i][2]*u[k][j][i][3])*tmp2;
-					fjac[k][i][j][1][3]=0.0;
-					fjac[k][i][j][2][3]=u[k][j][i][3]*tmp1;
-					fjac[k][i][j][3][3]=u[k][j][i][2]*tmp1;
-					fjac[k][i][j][4][3]=0.0;
-					fjac[k][i][j][0][4]=(c2*2.0*square[k][j][i]-c1*u[k][j][i][4])*u[k][j][i][2]*tmp2;
-					fjac[k][i][j][1][4]=-c2*u[k][j][i][1]*u[k][j][i][2]*tmp2;
-					fjac[k][i][j][2][4]=c1*u[k][j][i][4]*tmp1-c2*(qs[k][j][i]+u[k][j][i][2]*u[k][j][i][2]*tmp2);
-					fjac[k][i][j][3][4]=-c2*(u[k][j][i][2]*u[k][j][i][3])*tmp2;
-					fjac[k][i][j][4][4]=c1*u[k][j][i][2]*tmp1;
-					njac[k][i][j][0][0]=0.0;
-					njac[k][i][j][1][0]=0.0;
-					njac[k][i][j][2][0]=0.0;
-					njac[k][i][j][3][0]=0.0;
-					njac[k][i][j][4][0]=0.0;
-					njac[k][i][j][0][1]=-c3c4*tmp2*u[k][j][i][1];
-					njac[k][i][j][1][1]=c3c4*tmp1;
-					njac[k][i][j][2][1]=0.0;
-					njac[k][i][j][3][1]=0.0;
-					njac[k][i][j][4][1]=0.0;
-					njac[k][i][j][0][2]=-con43*c3c4*tmp2*u[k][j][i][2];
-					njac[k][i][j][1][2]=0.0;
-					njac[k][i][j][2][2]=con43*c3c4*tmp1;
-					njac[k][i][j][3][2]=0.0;
-					njac[k][i][j][4][2]=0.0;
-					njac[k][i][j][0][3]=-c3c4*tmp2*u[k][j][i][3];
-					njac[k][i][j][1][3]=0.0;
-					njac[k][i][j][2][3]=0.0;
-					njac[k][i][j][3][3]=c3c4*tmp1;
-					njac[k][i][j][4][3]=0.0;
-					njac[k][i][j][0][4]=-(c3c4-c1345)*tmp3*(u[k][j][i][1]*u[k][j][i][1])
-						-(con43*c3c4-c1345)*tmp3*(u[k][j][i][2]*u[k][j][i][2])
-						-(c3c4-c1345)*tmp3*(u[k][j][i][3]*u[k][j][i][3])
-						-c1345*tmp2*u[k][j][i][4];
-					njac[k][i][j][1][4]=(c3c4-c1345)*tmp2*u[k][j][i][1];
-					njac[k][i][j][2][4]=(con43*c3c4-c1345)*tmp2*u[k][j][i][2];
-					njac[k][i][j][3][4]=(c3c4-c1345)*tmp2*u[k][j][i][3];
-					njac[k][i][j][4][4]=(c1345)*tmp1;
-				}
-				/*
-				 * ---------------------------------------------------------------------
-				 * now joacobians set, so form left hand side in y direction
-				 * ---------------------------------------------------------------------
-				 */
-				for(j=1; j<=jsize-1; j++){
-					tmp1=dt*ty1;
-					tmp2=dt*ty2;
-					lhs[k][i][j][AA][0][0]=-tmp2*fjac[k][i][j-1][0][0]
-						-tmp1*njac[k][i][j-1][0][0]
-						-tmp1*dy1; 
-					lhs[k][i][j][AA][1][0]=-tmp2*fjac[k][i][j-1][1][0]
-						-tmp1*njac[k][i][j-1][1][0];
-					lhs[k][i][j][AA][2][0]=-tmp2*fjac[k][i][j-1][2][0]
-						-tmp1*njac[k][i][j-1][2][0];
-					lhs[k][i][j][AA][3][0]=-tmp2*fjac[k][i][j-1][3][0]
-						-tmp1*njac[k][i][j-1][3][0];
-					lhs[k][i][j][AA][4][0]=-tmp2*fjac[k][i][j-1][4][0]
-						-tmp1*njac[k][i][j-1][4][0];
-					lhs[k][i][j][AA][0][1]=-tmp2*fjac[k][i][j-1][0][1]
-						-tmp1*njac[k][i][j-1][0][1];
-					lhs[k][i][j][AA][1][1]=-tmp2*fjac[k][i][j-1][1][1]
-						-tmp1*njac[k][i][j-1][1][1]
-						-tmp1*dy2;
-					lhs[k][i][j][AA][2][1]=-tmp2*fjac[k][i][j-1][2][1]
-						-tmp1*njac[k][i][j-1][2][1];
-					lhs[k][i][j][AA][3][1]=-tmp2*fjac[k][i][j-1][3][1]
-						-tmp1*njac[k][i][j-1][3][1];
-					lhs[k][i][j][AA][4][1]=-tmp2*fjac[k][i][j-1][4][1]
-						-tmp1*njac[k][i][j-1][4][1];
-					lhs[k][i][j][AA][0][2]=-tmp2*fjac[k][i][j-1][0][2]
-						-tmp1*njac[k][i][j-1][0][2];
-					lhs[k][i][j][AA][1][2]=-tmp2*fjac[k][i][j-1][1][2]
-						-tmp1*njac[k][i][j-1][1][2];
-					lhs[k][i][j][AA][2][2]=-tmp2*fjac[k][i][j-1][2][2]
-						-tmp1*njac[k][i][j-1][2][2]
-						-tmp1*dy3;
-					lhs[k][i][j][AA][3][2]=-tmp2*fjac[k][i][j-1][3][2]
-						-tmp1*njac[k][i][j-1][3][2];
-					lhs[k][i][j][AA][4][2]=-tmp2*fjac[k][i][j-1][4][2]
-						-tmp1*njac[k][i][j-1][4][2];
-					lhs[k][i][j][AA][0][3]=-tmp2*fjac[k][i][j-1][0][3]
-						-tmp1*njac[k][i][j-1][0][3];
-					lhs[k][i][j][AA][1][3]=-tmp2*fjac[k][i][j-1][1][3]
-						-tmp1*njac[k][i][j-1][1][3];
-					lhs[k][i][j][AA][2][3]=-tmp2*fjac[k][i][j-1][2][3]
-						-tmp1*njac[k][i][j-1][2][3];
-					lhs[k][i][j][AA][3][3]=-tmp2*fjac[k][i][j-1][3][3]
-						-tmp1*njac[k][i][j-1][3][3]
-						-tmp1*dy4;
-					lhs[k][i][j][AA][4][3]=-tmp2*fjac[k][i][j-1][4][3]
-						-tmp1*njac[k][i][j-1][4][3];
-					lhs[k][i][j][AA][0][4]=-tmp2*fjac[k][i][j-1][0][4]
-						-tmp1*njac[k][i][j-1][0][4];
-					lhs[k][i][j][AA][1][4]=-tmp2*fjac[k][i][j-1][1][4]
-						-tmp1*njac[k][i][j-1][1][4];
-					lhs[k][i][j][AA][2][4]=-tmp2*fjac[k][i][j-1][2][4]
-						-tmp1*njac[k][i][j-1][2][4];
-					lhs[k][i][j][AA][3][4]=-tmp2*fjac[k][i][j-1][3][4]
-						-tmp1*njac[k][i][j-1][3][4];
-					lhs[k][i][j][AA][4][4]=-tmp2*fjac[k][i][j-1][4][4]
-						-tmp1*njac[k][i][j-1][4][4]
-						-tmp1*dy5;
-					lhs[k][i][j][BB][0][0]=1.0
-						+tmp1*2.0*njac[k][i][j][0][0]
-						+tmp1*2.0*dy1;
-					lhs[k][i][j][BB][1][0]=tmp1*2.0*njac[k][i][j][1][0];
-					lhs[k][i][j][BB][2][0]=tmp1*2.0*njac[k][i][j][2][0];
-					lhs[k][i][j][BB][3][0]=tmp1*2.0*njac[k][i][j][3][0];
-					lhs[k][i][j][BB][4][0]=tmp1*2.0*njac[k][i][j][4][0];
-					lhs[k][i][j][BB][0][1]=tmp1*2.0*njac[k][i][j][0][1];
-					lhs[k][i][j][BB][1][1]=1.0
-						+tmp1*2.0*njac[k][i][j][1][1]
-						+tmp1*2.0*dy2;
-					lhs[k][i][j][BB][2][1]=tmp1*2.0*njac[k][i][j][2][1];
-					lhs[k][i][j][BB][3][1]=tmp1*2.0*njac[k][i][j][3][1];
-					lhs[k][i][j][BB][4][1]=tmp1*2.0*njac[k][i][j][4][1];
-					lhs[k][i][j][BB][0][2]=tmp1*2.0*njac[k][i][j][0][2];
-					lhs[k][i][j][BB][1][2]=tmp1*2.0*njac[k][i][j][1][2];
-					lhs[k][i][j][BB][2][2]=1.0
-						+tmp1*2.0*njac[k][i][j][2][2]
-						+tmp1*2.0*dy3;
-					lhs[k][i][j][BB][3][2]=tmp1*2.0*njac[k][i][j][3][2];
-					lhs[k][i][j][BB][4][2]=tmp1*2.0*njac[k][i][j][4][2];
-					lhs[k][i][j][BB][0][3]=tmp1*2.0*njac[k][i][j][0][3];
-					lhs[k][i][j][BB][1][3]=tmp1*2.0*njac[k][i][j][1][3];
-					lhs[k][i][j][BB][2][3]=tmp1*2.0*njac[k][i][j][2][3];
-					lhs[k][i][j][BB][3][3]=1.0
-						+tmp1*2.0*njac[k][i][j][3][3]
-						+tmp1*2.0*dy4;
-					lhs[k][i][j][BB][4][3]=tmp1*2.0*njac[k][i][j][4][3];
-					lhs[k][i][j][BB][0][4]=tmp1*2.0*njac[k][i][j][0][4];
-					lhs[k][i][j][BB][1][4]=tmp1*2.0*njac[k][i][j][1][4];
-					lhs[k][i][j][BB][2][4]=tmp1*2.0*njac[k][i][j][2][4];
-					lhs[k][i][j][BB][3][4]=tmp1*2.0*njac[k][i][j][3][4];
-					lhs[k][i][j][BB][4][4]=1.0
-						+tmp1*2.0*njac[k][i][j][4][4] 
-						+tmp1*2.0*dy5;
-					lhs[k][i][j][CC][0][0]=tmp2*fjac[k][i][j+1][0][0]
-						-tmp1*njac[k][i][j+1][0][0]
-						-tmp1*dy1;
-					lhs[k][i][j][CC][1][0]=tmp2*fjac[k][i][j+1][1][0]
-						-tmp1*njac[k][i][j+1][1][0];
-					lhs[k][i][j][CC][2][0]=tmp2*fjac[k][i][j+1][2][0]
-						-tmp1*njac[k][i][j+1][2][0];
-					lhs[k][i][j][CC][3][0]=tmp2*fjac[k][i][j+1][3][0]
-						-tmp1*njac[k][i][j+1][3][0];
-					lhs[k][i][j][CC][4][0]=tmp2*fjac[k][i][j+1][4][0]
-						-tmp1*njac[k][i][j+1][4][0];
-					lhs[k][i][j][CC][0][1]=tmp2*fjac[k][i][j+1][0][1]
-						-tmp1*njac[k][i][j+1][0][1];
-					lhs[k][i][j][CC][1][1]=tmp2*fjac[k][i][j+1][1][1]
-						-tmp1*njac[k][i][j+1][1][1]
-						-tmp1*dy2;
-					lhs[k][i][j][CC][2][1]=tmp2*fjac[k][i][j+1][2][1]
-						-tmp1*njac[k][i][j+1][2][1];
-					lhs[k][i][j][CC][3][1]=tmp2*fjac[k][i][j+1][3][1]
-						-tmp1*njac[k][i][j+1][3][1];
-					lhs[k][i][j][CC][4][1]=tmp2*fjac[k][i][j+1][4][1]
-						-tmp1*njac[k][i][j+1][4][1];
-					lhs[k][i][j][CC][0][2]=tmp2*fjac[k][i][j+1][0][2]
-						-tmp1*njac[k][i][j+1][0][2];
-					lhs[k][i][j][CC][1][2]=tmp2*fjac[k][i][j+1][1][2]
-						-tmp1*njac[k][i][j+1][1][2];
-					lhs[k][i][j][CC][2][2]=tmp2*fjac[k][i][j+1][2][2]
-						-tmp1*njac[k][i][j+1][2][2]
-						-tmp1*dy3;
-					lhs[k][i][j][CC][3][2]=tmp2*fjac[k][i][j+1][3][2]
-						-tmp1*njac[k][i][j+1][3][2];
-					lhs[k][i][j][CC][4][2]=tmp2*fjac[k][i][j+1][4][2]
-						-tmp1*njac[k][i][j+1][4][2];
-					lhs[k][i][j][CC][0][3]=tmp2*fjac[k][i][j+1][0][3]
-						-tmp1*njac[k][i][j+1][0][3];
-					lhs[k][i][j][CC][1][3]=tmp2*fjac[k][i][j+1][1][3]
-						-tmp1*njac[k][i][j+1][1][3];
-					lhs[k][i][j][CC][2][3]=tmp2*fjac[k][i][j+1][2][3]
-						-tmp1*njac[k][i][j+1][2][3];
-					lhs[k][i][j][CC][3][3]=tmp2*fjac[k][i][j+1][3][3]
-						-tmp1*njac[k][i][j+1][3][3]
-						-tmp1*dy4;
-					lhs[k][i][j][CC][4][3]=tmp2*fjac[k][i][j+1][4][3]
-						-tmp1*njac[k][i][j+1][4][3];
-					lhs[k][i][j][CC][0][4]=tmp2*fjac[k][i][j+1][0][4]
-						-tmp1*njac[k][i][j+1][0][4];
-					lhs[k][i][j][CC][1][4]=tmp2*fjac[k][i][j+1][1][4]
-						-tmp1*njac[k][i][j+1][1][4];
-					lhs[k][i][j][CC][2][4]=tmp2*fjac[k][i][j+1][2][4]
-						-tmp1*njac[k][i][j+1][2][4];
-					lhs[k][i][j][CC][3][4]=tmp2*fjac[k][i][j+1][3][4]
-						-tmp1*njac[k][i][j+1][3][4];
-					lhs[k][i][j][CC][4][4]=tmp2*fjac[k][i][j+1][4][4]
-						-tmp1*njac[k][i][j+1][4][4]
-						-tmp1*dy5;
-				}
-				/*
-				 * ---------------------------------------------------------------------
-				 * performs guaussian elimination on this cell.
-				 *
-				 * assumes that unpacking routines for non-first cells 
-				 * preload c' and rhs' from previous cell.
-				 * 
-				 * assumed send happens outside this routine, but that
-				 * c'(JMAX) and rhs'(JMAX) will be sent to next cell
-				 * ---------------------------------------------------------------------
-				 * multiply c(i,0,k) by b_inverse and copy back to c
-				 * multiply rhs(0) by b_inverse(0) and copy to rhs
-				 * ---------------------------------------------------------------------
-				 */
-			}
-		}
-	
-        #pragma omp target teams distribute parallel for collapse(2)
-        // #pragma omp for 
-    	for(k=1; k<=grid_points[2]-2; k++){
-    		for(i=1; i<=grid_points[0]-2; i++){
-    			binvcrhs(lhs[k][i][0][BB], lhs[k][i][0][CC], rhs[k][0][i]);
-    			for(j=1; j<=jsize-1; j++){
-    				matvec_sub(lhs[k][i][j][AA], rhs[k][j-1][i], rhs[k][j][i]);
-    				matmul_sub(lhs[k][i][j][AA], lhs[k][i][j-1][CC], lhs[k][i][j][BB]);
-    				binvcrhs(lhs[k][i][j][BB], lhs[k][i][j][CC], rhs[k][j][i]);
-    			}
+    #pragma omp target teams distribute parallel for collapse(2)
+    for(k=1; k<=grid_points[2]-2; k++){
+        for(i=1; i<=grid_points[0]-2; i++){
+            matvec_sub(lhs[k][i][jsize][AA], rhs[k][jsize-1][i], rhs[k][jsize][i]);
+            matmul_sub(lhs[k][i][jsize][AA], lhs[k][i][jsize-1][CC], lhs[k][i][jsize][BB]);
+            binvrhs(lhs[k][i][jsize][BB], rhs[k][jsize][i]);
+        }
+    }
+    
+    #pragma omp target teams distribute parallel for collapse(2)
+    for(k=1; k<=grid_points[2]-2; k++){
+        for(i=1; i<=grid_points[0]-2; i++){
+            for(j=jsize-1; j>=0; j--){
+                for(m=0; m<BLOCK_SIZE; m++){
+                    for(n=0; n<BLOCK_SIZE; n++){
+                        rhs[k][j][i][m]=rhs[k][j][i][m]-lhs[k][i][j][CC][n][m]*rhs[k][j+1][i][n];
+                    }
+                }
             }
-    	}
-    	
-        // #pragma omp for collapse(2)
-        #pragma omp target teams distribute parallel for collapse(2)
-        for(k=1; k<=grid_points[2]-2; k++){
-    		for(i=1; i<=grid_points[0]-2; i++){
-    			matvec_sub(lhs[k][i][jsize][AA], rhs[k][jsize-1][i], rhs[k][jsize][i]);
-    			matmul_sub(lhs[k][i][jsize][AA], lhs[k][i][jsize-1][CC], lhs[k][i][jsize][BB]);
-    			binvrhs(lhs[k][i][jsize][BB], rhs[k][jsize][i]);
-            }
-    	}
-    	
-        #pragma omp target teams distribute parallel for collapse(2)
-        // #pragma omp for collapse(2)
-        for(k=1; k<=grid_points[2]-2; k++){
-    		for(i=1; i<=grid_points[0]-2; i++){
-    			for(j=jsize-1; j>=0; j--){
-    				for(m=0; m<BLOCK_SIZE; m++){
-    					for(n=0; n<BLOCK_SIZE; n++){
-    						rhs[k][j][i][m]=rhs[k][j][i][m]-lhs[k][i][j][CC][n][m]*rhs[k][j+1][i][n];
-    					}
-    				}
-    			}
-    		}
-    	}
-        if(timeron && thread_id==0){timer_stop(T_YSOLVE);}
-    // }
+        }
+    }
+    if(timeron && thread_id==0){timer_stop(T_YSOLVE);}
 }
 
 /*
@@ -3039,8 +2942,6 @@ void y_solve(){
  * ---------------------------------------------------------------------
  */
 void z_solve(){
-    // #pragma omp single
-    // {
 	int i, j, k, m, n, ksize;
 	int thread_id = omp_get_thread_num();
 	
@@ -3060,277 +2961,272 @@ void z_solve(){
 	double tmp1, tmp2, tmp3;
 	
 	
-        #pragma omp target teams distribute parallel for collapse(2)
-		// #pragma omp for
-		for(j=1; j<=grid_points[1]-2; j++){
-			for(i=1; i<=grid_points[0]-2; i++){
-				for(k=0; k<=ksize; k++){
-					tmp1=1.0/u[k][j][i][0];
-					tmp2=tmp1*tmp1;
-					tmp3=tmp1*tmp2;
-					fjac[j][i][k][0][0]=0.0;
-					fjac[j][i][k][1][0]=0.0;
-					fjac[j][i][k][2][0]=0.0;
-					fjac[j][i][k][3][0]=1.0;
-					fjac[j][i][k][4][0]=0.0;
-					fjac[j][i][k][0][1]=-(u[k][j][i][1]*u[k][j][i][3])*tmp2;
-					fjac[j][i][k][1][1]=u[k][j][i][3]*tmp1;
-					fjac[j][i][k][2][1]=0.0;
-					fjac[j][i][k][3][1]=u[k][j][i][1]*tmp1;
-					fjac[j][i][k][4][1]=0.0;
-					fjac[j][i][k][0][2]=-(u[k][j][i][2]*u[k][j][i][3])*tmp2;
-					fjac[j][i][k][1][2]=0.0;
-					fjac[j][i][k][2][2]=u[k][j][i][3]*tmp1;
-					fjac[j][i][k][3][2]=u[k][j][i][2]*tmp1;
-					fjac[j][i][k][4][2]=0.0;
-					fjac[j][i][k][0][3]=-(u[k][j][i][3]*u[k][j][i][3]*tmp2)+c2*qs[k][j][i];
-					fjac[j][i][k][1][3]=-c2*u[k][j][i][1]*tmp1;
-					fjac[j][i][k][2][3]=-c2*u[k][j][i][2]*tmp1;
-					fjac[j][i][k][3][3]=(2.0-c2)*u[k][j][i][3]*tmp1;
-					fjac[j][i][k][4][3]=c2;
-					fjac[j][i][k][0][4]=(c2*2.0*square[k][j][i]-c1*u[k][j][i][4])*u[k][j][i][3]*tmp2;
-					fjac[j][i][k][1][4]=-c2*(u[k][j][i][1]*u[k][j][i][3])*tmp2;
-					fjac[j][i][k][2][4]=-c2*(u[k][j][i][2]*u[k][j][i][3])*tmp2;
-					fjac[j][i][k][3][4]=c1*(u[k][j][i][4]*tmp1)-c2*(qs[k][j][i]+u[k][j][i][3]*u[k][j][i][3]*tmp2);
-					fjac[j][i][k][4][4]=c1*u[k][j][i][3]*tmp1;
-					njac[j][i][k][0][0]=0.0;
-					njac[j][i][k][1][0]=0.0;
-					njac[j][i][k][2][0]=0.0;
-					njac[j][i][k][3][0]=0.0;
-					njac[j][i][k][4][0]=0.0;
-					njac[j][i][k][0][1]=-c3c4*tmp2*u[k][j][i][1];
-					njac[j][i][k][1][1]=c3c4*tmp1;
-					njac[j][i][k][2][1]=0.0;
-					njac[j][i][k][3][1]=0.0;
-					njac[j][i][k][4][1]=0.0;
-					njac[j][i][k][0][2]=-c3c4*tmp2*u[k][j][i][2];
-					njac[j][i][k][1][2]=0.0;
-					njac[j][i][k][2][2]=c3c4*tmp1;
-					njac[j][i][k][3][2]=0.0;
-					njac[j][i][k][4][2]=0.0;
-					njac[j][i][k][0][3]=-con43*c3c4*tmp2*u[k][j][i][3];
-					njac[j][i][k][1][3]=0.0;
-					njac[j][i][k][2][3]=0.0;
-					njac[j][i][k][3][3]=con43*c3*c4*tmp1;
-					njac[j][i][k][4][3]=0.0;
-					njac[j][i][k][0][4]=-(c3c4-c1345)*tmp3*(u[k][j][i][1]*u[k][j][i][1])
-						-(c3c4-c1345)*tmp3*(u[k][j][i][2]*u[k][j][i][2])
-						-(con43*c3c4-c1345)*tmp3*(u[k][j][i][3]*u[k][j][i][3])
-						-c1345*tmp2*u[k][j][i][4];
-					njac[j][i][k][1][4]=(c3c4-c1345)*tmp2*u[k][j][i][1];
-					njac[j][i][k][2][4]=(c3c4-c1345)*tmp2*u[k][j][i][2];
-					njac[j][i][k][3][4]=(con43*c3c4-c1345)*tmp2*u[k][j][i][3];
-					njac[j][i][k][4][4]=(c1345)*tmp1;
-				}
-				/*
-				 * ---------------------------------------------------------------------
-				 * now jac_guy[j][i]obians set, so form left hand side in z direction
-				 * ---------------------------------------------------------------------
-				 */
-				for(k=1; k<=ksize-1; k++){
-					tmp1=dt*tz1;
-					tmp2=dt*tz2;
-					lhs[j][i][k][AA][0][0]=-tmp2*fjac[j][i][k-1][0][0]
-						-tmp1*njac[j][i][k-1][0][0]
-						-tmp1*dz1; 
-					lhs[j][i][k][AA][1][0]=-tmp2*fjac[j][i][k-1][1][0]
-						-tmp1*njac[j][i][k-1][1][0];
-					lhs[j][i][k][AA][2][0]=-tmp2*fjac[j][i][k-1][2][0]
-						-tmp1*njac[j][i][k-1][2][0];
-					lhs[j][i][k][AA][3][0]=-tmp2*fjac[j][i][k-1][3][0]
-						-tmp1*njac[j][i][k-1][3][0];
-					lhs[j][i][k][AA][4][0]=-tmp2*fjac[j][i][k-1][4][0]
-						-tmp1*njac[j][i][k-1][4][0];
-					lhs[j][i][k][AA][0][1]=-tmp2*fjac[j][i][k-1][0][1]
-						-tmp1*njac[j][i][k-1][0][1];
-					lhs[j][i][k][AA][1][1]=-tmp2*fjac[j][i][k-1][1][1]
-						-tmp1*njac[j][i][k-1][1][1]
-						-tmp1*dz2;
-					lhs[j][i][k][AA][2][1]=-tmp2*fjac[j][i][k-1][2][1]
-						-tmp1*njac[j][i][k-1][2][1];
-					lhs[j][i][k][AA][3][1]=-tmp2*fjac[j][i][k-1][3][1]
-						-tmp1*njac[j][i][k-1][3][1];
-					lhs[j][i][k][AA][4][1]=-tmp2*fjac[j][i][k-1][4][1]
-						-tmp1*njac[j][i][k-1][4][1];
-					lhs[j][i][k][AA][0][2]=-tmp2*fjac[j][i][k-1][0][2]
-						-tmp1*njac[j][i][k-1][0][2];
-					lhs[j][i][k][AA][1][2]=-tmp2*fjac[j][i][k-1][1][2]
-						-tmp1*njac[j][i][k-1][1][2];
-					lhs[j][i][k][AA][2][2]=-tmp2*fjac[j][i][k-1][2][2]
-						-tmp1*njac[j][i][k-1][2][2]
-						-tmp1*dz3;
-					lhs[j][i][k][AA][3][2]=-tmp2*fjac[j][i][k-1][3][2]
-						-tmp1*njac[j][i][k-1][3][2];
-					lhs[j][i][k][AA][4][2]=-tmp2*fjac[j][i][k-1][4][2]
-						-tmp1*njac[j][i][k-1][4][2];
-					lhs[j][i][k][AA][0][3]=-tmp2*fjac[j][i][k-1][0][3]
-						-tmp1*njac[j][i][k-1][0][3];
-					lhs[j][i][k][AA][1][3]=-tmp2*fjac[j][i][k-1][1][3]
-						-tmp1*njac[j][i][k-1][1][3];
-					lhs[j][i][k][AA][2][3]=-tmp2*fjac[j][i][k-1][2][3]
-						-tmp1*njac[j][i][k-1][2][3];
-					lhs[j][i][k][AA][3][3]=-tmp2*fjac[j][i][k-1][3][3]
-						-tmp1*njac[j][i][k-1][3][3]
-						-tmp1*dz4;
-					lhs[j][i][k][AA][4][3]=-tmp2*fjac[j][i][k-1][4][3]
-						-tmp1*njac[j][i][k-1][4][3];
-					lhs[j][i][k][AA][0][4]=-tmp2*fjac[j][i][k-1][0][4]
-						-tmp1*njac[j][i][k-1][0][4];
-					lhs[j][i][k][AA][1][4]=-tmp2*fjac[j][i][k-1][1][4]
-						-tmp1*njac[j][i][k-1][1][4];
-					lhs[j][i][k][AA][2][4]=-tmp2*fjac[j][i][k-1][2][4]
-						-tmp1*njac[j][i][k-1][2][4];
-					lhs[j][i][k][AA][3][4]=-tmp2*fjac[j][i][k-1][3][4]
-						-tmp1*njac[j][i][k-1][3][4];
-					lhs[j][i][k][AA][4][4]=-tmp2*fjac[j][i][k-1][4][4]
-						-tmp1*njac[j][i][k-1][4][4]
-						-tmp1*dz5;
-					lhs[j][i][k][BB][0][0]=1.0
-						+tmp1*2.0*njac[j][i][k][0][0]
-						+tmp1*2.0*dz1;
-					lhs[j][i][k][BB][1][0]=tmp1*2.0*njac[j][i][k][1][0];
-					lhs[j][i][k][BB][2][0]=tmp1*2.0*njac[j][i][k][2][0];
-					lhs[j][i][k][BB][3][0]=tmp1*2.0*njac[j][i][k][3][0];
-					lhs[j][i][k][BB][4][0]=tmp1*2.0*njac[j][i][k][4][0];
-					lhs[j][i][k][BB][0][1]=tmp1*2.0*njac[j][i][k][0][1];
-					lhs[j][i][k][BB][1][1]=1.0
-						+tmp1*2.0*njac[j][i][k][1][1]
-						+tmp1*2.0*dz2;
-					lhs[j][i][k][BB][2][1]=tmp1*2.0*njac[j][i][k][2][1];
-					lhs[j][i][k][BB][3][1]=tmp1*2.0*njac[j][i][k][3][1];
-					lhs[j][i][k][BB][4][1]=tmp1*2.0*njac[j][i][k][4][1];
-					lhs[j][i][k][BB][0][2]=tmp1*2.0*njac[j][i][k][0][2];
-					lhs[j][i][k][BB][1][2]=tmp1*2.0*njac[j][i][k][1][2];
-					lhs[j][i][k][BB][2][2]=1.0
-						+tmp1*2.0*njac[j][i][k][2][2]
-						+tmp1*2.0*dz3;
-					lhs[j][i][k][BB][3][2]=tmp1*2.0*njac[j][i][k][3][2];
-					lhs[j][i][k][BB][4][2]=tmp1*2.0*njac[j][i][k][4][2];
-					lhs[j][i][k][BB][0][3]=tmp1*2.0*njac[j][i][k][0][3];
-					lhs[j][i][k][BB][1][3]=tmp1*2.0*njac[j][i][k][1][3];
-					lhs[j][i][k][BB][2][3]=tmp1*2.0*njac[j][i][k][2][3];
-					lhs[j][i][k][BB][3][3]=1.0
-						+tmp1*2.0*njac[j][i][k][3][3]
-						+tmp1*2.0*dz4;
-					lhs[j][i][k][BB][4][3]=tmp1*2.0*njac[j][i][k][4][3];
-					lhs[j][i][k][BB][0][4]=tmp1*2.0*njac[j][i][k][0][4];
-					lhs[j][i][k][BB][1][4]=tmp1*2.0*njac[j][i][k][1][4];
-					lhs[j][i][k][BB][2][4]=tmp1*2.0*njac[j][i][k][2][4];
-					lhs[j][i][k][BB][3][4]=tmp1*2.0*njac[j][i][k][3][4];
-					lhs[j][i][k][BB][4][4]=1.0
-						+tmp1*2.0*njac[j][i][k][4][4] 
-						+tmp1*2.0*dz5;
-					lhs[j][i][k][CC][0][0]=tmp2*fjac[j][i][k+1][0][0]
-						-tmp1*njac[j][i][k+1][0][0]
-						-tmp1*dz1;
-					lhs[j][i][k][CC][1][0]=tmp2*fjac[j][i][k+1][1][0]
-						-tmp1*njac[j][i][k+1][1][0];
-					lhs[j][i][k][CC][2][0]=tmp2*fjac[j][i][k+1][2][0]
-						-tmp1*njac[j][i][k+1][2][0];
-					lhs[j][i][k][CC][3][0]=tmp2*fjac[j][i][k+1][3][0]
-						-tmp1*njac[j][i][k+1][3][0];
-					lhs[j][i][k][CC][4][0]=tmp2*fjac[j][i][k+1][4][0]
-						-tmp1*njac[j][i][k+1][4][0];
-					lhs[j][i][k][CC][0][1]=tmp2*fjac[j][i][k+1][0][1]
-						-tmp1*njac[j][i][k+1][0][1];
-					lhs[j][i][k][CC][1][1]=tmp2*fjac[j][i][k+1][1][1]
-						-tmp1*njac[j][i][k+1][1][1]
-						-tmp1*dz2;
-					lhs[j][i][k][CC][2][1]=tmp2*fjac[j][i][k+1][2][1]
-						-tmp1*njac[j][i][k+1][2][1];
-					lhs[j][i][k][CC][3][1]=tmp2*fjac[j][i][k+1][3][1]
-						-tmp1*njac[j][i][k+1][3][1];
-					lhs[j][i][k][CC][4][1]=tmp2*fjac[j][i][k+1][4][1]
-						-tmp1*njac[j][i][k+1][4][1];
-					lhs[j][i][k][CC][0][2]=tmp2*fjac[j][i][k+1][0][2]
-						-tmp1*njac[j][i][k+1][0][2];
-					lhs[j][i][k][CC][1][2]= tmp2*fjac[j][i][k+1][1][2]
-						-tmp1*njac[j][i][k+1][1][2];
-					lhs[j][i][k][CC][2][2]=tmp2*fjac[j][i][k+1][2][2]
-						-tmp1*njac[j][i][k+1][2][2]
-						-tmp1*dz3;
-					lhs[j][i][k][CC][3][2]=tmp2*fjac[j][i][k+1][3][2]
-						-tmp1*njac[j][i][k+1][3][2];
-					lhs[j][i][k][CC][4][2]=tmp2*fjac[j][i][k+1][4][2]
-						-tmp1*njac[j][i][k+1][4][2];					
-					lhs[j][i][k][CC][0][3]=tmp2*fjac[j][i][k+1][0][3]
-						-tmp1*njac[j][i][k+1][0][3];
-					lhs[j][i][k][CC][1][3]=tmp2*fjac[j][i][k+1][1][3]
-						-tmp1*njac[j][i][k+1][1][3];
-					lhs[j][i][k][CC][2][3]=tmp2*fjac[j][i][k+1][2][3]
-						-tmp1*njac[j][i][k+1][2][3];
-					lhs[j][i][k][CC][3][3]=tmp2*fjac[j][i][k+1][3][3]
-						-tmp1*njac[j][i][k+1][3][3]
-						-tmp1*dz4;
-					lhs[j][i][k][CC][4][3]=tmp2*fjac[j][i][k+1][4][3]
-						-tmp1*njac[j][i][k+1][4][3];
-					lhs[j][i][k][CC][0][4]=tmp2*fjac[j][i][k+1][0][4]
-						-tmp1*njac[j][i][k+1][0][4];
-					lhs[j][i][k][CC][1][4]=tmp2*fjac[j][i][k+1][1][4]
-						-tmp1*njac[j][i][k+1][1][4];
-					lhs[j][i][k][CC][2][4]=tmp2*fjac[j][i][k+1][2][4]
-						-tmp1*njac[j][i][k+1][2][4];
-					lhs[j][i][k][CC][3][4]=tmp2*fjac[j][i][k+1][3][4]
-						-tmp1*njac[j][i][k+1][3][4];
-					lhs[j][i][k][CC][4][4]=tmp2*fjac[j][i][k+1][4][4]
-						-tmp1*njac[j][i][k+1][4][4]
-						-tmp1*dz5;
-				}
-				/*
-				 * ---------------------------------------------------------------------
-				 * performs guaussian elimination on this cell.
-				 *  
-				 * assumes that unpacking routines for non-first cells 
-				 * preload c' and rhs' from previous cell.
-				 *  
-				 * assumed send happens outside this routine, but that
-				 * c'(KMAX) and rhs'(KMAX) will be sent to next cell.
-				 * ---------------------------------------------------------------------
-				 * outer most do loops - sweeping in i direction
-				 * ---------------------------------------------------------------------
-				 * multiply c(i,j,0) by b_inverse and copy back to c
-				 * multiply rhs(0) by b_inverse(0) and copy to rhs
-				 * ---------------------------------------------------------------------
-				 */
-			}
-		}
-	
-        #pragma omp target teams distribute parallel for collapse(2)
-        // #pragma omp for collapse(2)
-    	for(j=1; j<=grid_points[1]-2; j++){
-    		for(i=1; i<=grid_points[0]-2; i++){
-    			binvcrhs(lhs[j][i][0][BB], lhs[j][i][0][CC], rhs[0][j][i]);
-    			for(k=1; k<=ksize-1; k++){
-    				matvec_sub(lhs[j][i][k][AA], rhs[k-1][j][i], rhs[k][j][i]);
-    				matmul_sub(lhs[j][i][k][AA], lhs[j][i][k-1][CC], lhs[j][i][k][BB]);
-    				binvcrhs(lhs[j][i][k][BB], lhs[j][i][k][CC], rhs[k][j][i]);
-    			}
+    #pragma omp target teams distribute parallel for collapse(2)
+    for(j=1; j<=grid_points[1]-2; j++){
+        for(i=1; i<=grid_points[0]-2; i++){
+            for(k=0; k<=ksize; k++){
+                tmp1=1.0/u[k][j][i][0];
+                tmp2=tmp1*tmp1;
+                tmp3=tmp1*tmp2;
+                fjac[j][i][k][0][0]=0.0;
+                fjac[j][i][k][1][0]=0.0;
+                fjac[j][i][k][2][0]=0.0;
+                fjac[j][i][k][3][0]=1.0;
+                fjac[j][i][k][4][0]=0.0;
+                fjac[j][i][k][0][1]=-(u[k][j][i][1]*u[k][j][i][3])*tmp2;
+                fjac[j][i][k][1][1]=u[k][j][i][3]*tmp1;
+                fjac[j][i][k][2][1]=0.0;
+                fjac[j][i][k][3][1]=u[k][j][i][1]*tmp1;
+                fjac[j][i][k][4][1]=0.0;
+                fjac[j][i][k][0][2]=-(u[k][j][i][2]*u[k][j][i][3])*tmp2;
+                fjac[j][i][k][1][2]=0.0;
+                fjac[j][i][k][2][2]=u[k][j][i][3]*tmp1;
+                fjac[j][i][k][3][2]=u[k][j][i][2]*tmp1;
+                fjac[j][i][k][4][2]=0.0;
+                fjac[j][i][k][0][3]=-(u[k][j][i][3]*u[k][j][i][3]*tmp2)+c2*qs[k][j][i];
+                fjac[j][i][k][1][3]=-c2*u[k][j][i][1]*tmp1;
+                fjac[j][i][k][2][3]=-c2*u[k][j][i][2]*tmp1;
+                fjac[j][i][k][3][3]=(2.0-c2)*u[k][j][i][3]*tmp1;
+                fjac[j][i][k][4][3]=c2;
+                fjac[j][i][k][0][4]=(c2*2.0*square[k][j][i]-c1*u[k][j][i][4])*u[k][j][i][3]*tmp2;
+                fjac[j][i][k][1][4]=-c2*(u[k][j][i][1]*u[k][j][i][3])*tmp2;
+                fjac[j][i][k][2][4]=-c2*(u[k][j][i][2]*u[k][j][i][3])*tmp2;
+                fjac[j][i][k][3][4]=c1*(u[k][j][i][4]*tmp1)-c2*(qs[k][j][i]+u[k][j][i][3]*u[k][j][i][3]*tmp2);
+                fjac[j][i][k][4][4]=c1*u[k][j][i][3]*tmp1;
+                njac[j][i][k][0][0]=0.0;
+                njac[j][i][k][1][0]=0.0;
+                njac[j][i][k][2][0]=0.0;
+                njac[j][i][k][3][0]=0.0;
+                njac[j][i][k][4][0]=0.0;
+                njac[j][i][k][0][1]=-c3c4*tmp2*u[k][j][i][1];
+                njac[j][i][k][1][1]=c3c4*tmp1;
+                njac[j][i][k][2][1]=0.0;
+                njac[j][i][k][3][1]=0.0;
+                njac[j][i][k][4][1]=0.0;
+                njac[j][i][k][0][2]=-c3c4*tmp2*u[k][j][i][2];
+                njac[j][i][k][1][2]=0.0;
+                njac[j][i][k][2][2]=c3c4*tmp1;
+                njac[j][i][k][3][2]=0.0;
+                njac[j][i][k][4][2]=0.0;
+                njac[j][i][k][0][3]=-con43*c3c4*tmp2*u[k][j][i][3];
+                njac[j][i][k][1][3]=0.0;
+                njac[j][i][k][2][3]=0.0;
+                njac[j][i][k][3][3]=con43*c3*c4*tmp1;
+                njac[j][i][k][4][3]=0.0;
+                njac[j][i][k][0][4]=-(c3c4-c1345)*tmp3*(u[k][j][i][1]*u[k][j][i][1])
+                    -(c3c4-c1345)*tmp3*(u[k][j][i][2]*u[k][j][i][2])
+                    -(con43*c3c4-c1345)*tmp3*(u[k][j][i][3]*u[k][j][i][3])
+                    -c1345*tmp2*u[k][j][i][4];
+                njac[j][i][k][1][4]=(c3c4-c1345)*tmp2*u[k][j][i][1];
+                njac[j][i][k][2][4]=(c3c4-c1345)*tmp2*u[k][j][i][2];
+                njac[j][i][k][3][4]=(con43*c3c4-c1345)*tmp2*u[k][j][i][3];
+                njac[j][i][k][4][4]=(c1345)*tmp1;
             }
-    	}
-        
-        // #pragma omp for collapse(2)
-        #pragma omp target teams distribute parallel for collapse(2)
-    	for(j=1; j<=grid_points[1]-2; j++){
-    		for(i=1; i<=grid_points[0]-2; i++){
-    			matvec_sub(lhs[j][i][ksize][AA], rhs[ksize-1][j][i], rhs[ksize][j][i]);
-    			matmul_sub(lhs[j][i][ksize][AA], lhs[j][i][ksize-1][CC], lhs[j][i][ksize][BB]);
-    			binvrhs(lhs[j][i][ksize][BB], rhs[ksize][j][i]);
+            /*
+             * ---------------------------------------------------------------------
+             * now jacobians set, so form left hand side in z direction
+             * ---------------------------------------------------------------------
+             */
+            for(k=1; k<=ksize-1; k++){
+                tmp1=dt*tz1;
+                tmp2=dt*tz2;
+                lhs[j][i][k][AA][0][0]=-tmp2*fjac[j][i][k-1][0][0]
+                    -tmp1*njac[j][i][k-1][0][0]
+                    -tmp1*dz1; 
+                lhs[j][i][k][AA][1][0]=-tmp2*fjac[j][i][k-1][1][0]
+                    -tmp1*njac[j][i][k-1][1][0];
+                lhs[j][i][k][AA][2][0]=-tmp2*fjac[j][i][k-1][2][0]
+                    -tmp1*njac[j][i][k-1][2][0];
+                lhs[j][i][k][AA][3][0]=-tmp2*fjac[j][i][k-1][3][0]
+                    -tmp1*njac[j][i][k-1][3][0];
+                lhs[j][i][k][AA][4][0]=-tmp2*fjac[j][i][k-1][4][0]
+                    -tmp1*njac[j][i][k-1][4][0];
+                lhs[j][i][k][AA][0][1]=-tmp2*fjac[j][i][k-1][0][1]
+                    -tmp1*njac[j][i][k-1][0][1];
+                lhs[j][i][k][AA][1][1]=-tmp2*fjac[j][i][k-1][1][1]
+                    -tmp1*njac[j][i][k-1][1][1]
+                    -tmp1*dz2;
+                lhs[j][i][k][AA][2][1]=-tmp2*fjac[j][i][k-1][2][1]
+                    -tmp1*njac[j][i][k-1][2][1];
+                lhs[j][i][k][AA][3][1]=-tmp2*fjac[j][i][k-1][3][1]
+                    -tmp1*njac[j][i][k-1][3][1];
+                lhs[j][i][k][AA][4][1]=-tmp2*fjac[j][i][k-1][4][1]
+                    -tmp1*njac[j][i][k-1][4][1];
+                lhs[j][i][k][AA][0][2]=-tmp2*fjac[j][i][k-1][0][2]
+                    -tmp1*njac[j][i][k-1][0][2];
+                lhs[j][i][k][AA][1][2]=-tmp2*fjac[j][i][k-1][1][2]
+                    -tmp1*njac[j][i][k-1][1][2];
+                lhs[j][i][k][AA][2][2]=-tmp2*fjac[j][i][k-1][2][2]
+                    -tmp1*njac[j][i][k-1][2][2]
+                    -tmp1*dz3;
+                lhs[j][i][k][AA][3][2]=-tmp2*fjac[j][i][k-1][3][2]
+                    -tmp1*njac[j][i][k-1][3][2];
+                lhs[j][i][k][AA][4][2]=-tmp2*fjac[j][i][k-1][4][2]
+                    -tmp1*njac[j][i][k-1][4][2];
+                lhs[j][i][k][AA][0][3]=-tmp2*fjac[j][i][k-1][0][3]
+                    -tmp1*njac[j][i][k-1][0][3];
+                lhs[j][i][k][AA][1][3]=-tmp2*fjac[j][i][k-1][1][3]
+                    -tmp1*njac[j][i][k-1][1][3];
+                lhs[j][i][k][AA][2][3]=-tmp2*fjac[j][i][k-1][2][3]
+                    -tmp1*njac[j][i][k-1][2][3];
+                lhs[j][i][k][AA][3][3]=-tmp2*fjac[j][i][k-1][3][3]
+                    -tmp1*njac[j][i][k-1][3][3]
+                    -tmp1*dz4;
+                lhs[j][i][k][AA][4][3]=-tmp2*fjac[j][i][k-1][4][3]
+                    -tmp1*njac[j][i][k-1][4][3];
+                lhs[j][i][k][AA][0][4]=-tmp2*fjac[j][i][k-1][0][4]
+                    -tmp1*njac[j][i][k-1][0][4];
+                lhs[j][i][k][AA][1][4]=-tmp2*fjac[j][i][k-1][1][4]
+                    -tmp1*njac[j][i][k-1][1][4];
+                lhs[j][i][k][AA][2][4]=-tmp2*fjac[j][i][k-1][2][4]
+                    -tmp1*njac[j][i][k-1][2][4];
+                lhs[j][i][k][AA][3][4]=-tmp2*fjac[j][i][k-1][3][4]
+                    -tmp1*njac[j][i][k-1][3][4];
+                lhs[j][i][k][AA][4][4]=-tmp2*fjac[j][i][k-1][4][4]
+                    -tmp1*njac[j][i][k-1][4][4]
+                    -tmp1*dz5;
+                lhs[j][i][k][BB][0][0]=1.0
+                    +tmp1*2.0*njac[j][i][k][0][0]
+                    +tmp1*2.0*dz1;
+                lhs[j][i][k][BB][1][0]=tmp1*2.0*njac[j][i][k][1][0];
+                lhs[j][i][k][BB][2][0]=tmp1*2.0*njac[j][i][k][2][0];
+                lhs[j][i][k][BB][3][0]=tmp1*2.0*njac[j][i][k][3][0];
+                lhs[j][i][k][BB][4][0]=tmp1*2.0*njac[j][i][k][4][0];
+                lhs[j][i][k][BB][0][1]=tmp1*2.0*njac[j][i][k][0][1];
+                lhs[j][i][k][BB][1][1]=1.0
+                    +tmp1*2.0*njac[j][i][k][1][1]
+                    +tmp1*2.0*dz2;
+                lhs[j][i][k][BB][2][1]=tmp1*2.0*njac[j][i][k][2][1];
+                lhs[j][i][k][BB][3][1]=tmp1*2.0*njac[j][i][k][3][1];
+                lhs[j][i][k][BB][4][1]=tmp1*2.0*njac[j][i][k][4][1];
+                lhs[j][i][k][BB][0][2]=tmp1*2.0*njac[j][i][k][0][2];
+                lhs[j][i][k][BB][1][2]=tmp1*2.0*njac[j][i][k][1][2];
+                lhs[j][i][k][BB][2][2]=1.0
+                    +tmp1*2.0*njac[j][i][k][2][2]
+                    +tmp1*2.0*dz3;
+                lhs[j][i][k][BB][3][2]=tmp1*2.0*njac[j][i][k][3][2];
+                lhs[j][i][k][BB][4][2]=tmp1*2.0*njac[j][i][k][4][2];
+                lhs[j][i][k][BB][0][3]=tmp1*2.0*njac[j][i][k][0][3];
+                lhs[j][i][k][BB][1][3]=tmp1*2.0*njac[j][i][k][1][3];
+                lhs[j][i][k][BB][2][3]=tmp1*2.0*njac[j][i][k][2][3];
+                lhs[j][i][k][BB][3][3]=1.0
+                    +tmp1*2.0*njac[j][i][k][3][3]
+                    +tmp1*2.0*dz4;
+                lhs[j][i][k][BB][4][3]=tmp1*2.0*njac[j][i][k][4][3];
+                lhs[j][i][k][BB][0][4]=tmp1*2.0*njac[j][i][k][0][4];
+                lhs[j][i][k][BB][1][4]=tmp1*2.0*njac[j][i][k][1][4];
+                lhs[j][i][k][BB][2][4]=tmp1*2.0*njac[j][i][k][2][4];
+                lhs[j][i][k][BB][3][4]=tmp1*2.0*njac[j][i][k][3][4];
+                lhs[j][i][k][BB][4][4]=1.0
+                    +tmp1*2.0*njac[j][i][k][4][4] 
+                    +tmp1*2.0*dz5;
+                lhs[j][i][k][CC][0][0]=tmp2*fjac[j][i][k+1][0][0]
+                    -tmp1*njac[j][i][k+1][0][0]
+                    -tmp1*dz1;
+                lhs[j][i][k][CC][1][0]=tmp2*fjac[j][i][k+1][1][0]
+                    -tmp1*njac[j][i][k+1][1][0];
+                lhs[j][i][k][CC][2][0]=tmp2*fjac[j][i][k+1][2][0]
+                    -tmp1*njac[j][i][k+1][2][0];
+                lhs[j][i][k][CC][3][0]=tmp2*fjac[j][i][k+1][3][0]
+                    -tmp1*njac[j][i][k+1][3][0];
+                lhs[j][i][k][CC][4][0]=tmp2*fjac[j][i][k+1][4][0]
+                    -tmp1*njac[j][i][k+1][4][0];
+                lhs[j][i][k][CC][0][1]=tmp2*fjac[j][i][k+1][0][1]
+                    -tmp1*njac[j][i][k+1][0][1];
+                lhs[j][i][k][CC][1][1]=tmp2*fjac[j][i][k+1][1][1]
+                    -tmp1*njac[j][i][k+1][1][1]
+                    -tmp1*dz2;
+                lhs[j][i][k][CC][2][1]=tmp2*fjac[j][i][k+1][2][1]
+                    -tmp1*njac[j][i][k+1][2][1];
+                lhs[j][i][k][CC][3][1]=tmp2*fjac[j][i][k+1][3][1]
+                    -tmp1*njac[j][i][k+1][3][1];
+                lhs[j][i][k][CC][4][1]=tmp2*fjac[j][i][k+1][4][1]
+                    -tmp1*njac[j][i][k+1][4][1];
+                lhs[j][i][k][CC][0][2]=tmp2*fjac[j][i][k+1][0][2]
+                    -tmp1*njac[j][i][k+1][0][2];
+                lhs[j][i][k][CC][1][2]= tmp2*fjac[j][i][k+1][1][2]
+                    -tmp1*njac[j][i][k+1][1][2];
+                lhs[j][i][k][CC][2][2]=tmp2*fjac[j][i][k+1][2][2]
+                    -tmp1*njac[j][i][k+1][2][2]
+                    -tmp1*dz3;
+                lhs[j][i][k][CC][3][2]=tmp2*fjac[j][i][k+1][3][2]
+                    -tmp1*njac[j][i][k+1][3][2];
+                lhs[j][i][k][CC][4][2]=tmp2*fjac[j][i][k+1][4][2]
+                    -tmp1*njac[j][i][k+1][4][2];					
+                lhs[j][i][k][CC][0][3]=tmp2*fjac[j][i][k+1][0][3]
+                    -tmp1*njac[j][i][k+1][0][3];
+                lhs[j][i][k][CC][1][3]=tmp2*fjac[j][i][k+1][1][3]
+                    -tmp1*njac[j][i][k+1][1][3];
+                lhs[j][i][k][CC][2][3]=tmp2*fjac[j][i][k+1][2][3]
+                    -tmp1*njac[j][i][k+1][2][3];
+                lhs[j][i][k][CC][3][3]=tmp2*fjac[j][i][k+1][3][3]
+                    -tmp1*njac[j][i][k+1][3][3]
+                    -tmp1*dz4;
+                lhs[j][i][k][CC][4][3]=tmp2*fjac[j][i][k+1][4][3]
+                    -tmp1*njac[j][i][k+1][4][3];
+                lhs[j][i][k][CC][0][4]=tmp2*fjac[j][i][k+1][0][4]
+                    -tmp1*njac[j][i][k+1][0][4];
+                lhs[j][i][k][CC][1][4]=tmp2*fjac[j][i][k+1][1][4]
+                    -tmp1*njac[j][i][k+1][1][4];
+                lhs[j][i][k][CC][2][4]=tmp2*fjac[j][i][k+1][2][4]
+                    -tmp1*njac[j][i][k+1][2][4];
+                lhs[j][i][k][CC][3][4]=tmp2*fjac[j][i][k+1][3][4]
+                    -tmp1*njac[j][i][k+1][3][4];
+                lhs[j][i][k][CC][4][4]=tmp2*fjac[j][i][k+1][4][4]
+                    -tmp1*njac[j][i][k+1][4][4]
+                    -tmp1*dz5;
             }
-    	}   
-    	
-        #pragma omp target teams distribute parallel for collapse(2)
-        // #pragma omp for collapse(2)
-    	for(j=1; j<=grid_points[1]-2; j++){
-    		for(i=1; i<=grid_points[0]-2; i++){
-    			for(k=ksize-1; k>=0; k--){
-    				for(m=0; m<BLOCK_SIZE; m++){
-    					for(n=0; n<BLOCK_SIZE; n++){
-    						rhs[k][j][i][m]=rhs[k][j][i][m]-lhs[j][i][k][CC][n][m]*rhs[k+1][j][i][n];
-    					}
-    				}
-    			}
-    		}
-    	}
-        if(timeron && thread_id==0){timer_stop(T_ZSOLVE);}
-    // }
+            /*
+             * ---------------------------------------------------------------------
+             * performs guaussian elimination on this cell.
+             *  
+             * assumes that unpacking routines for non-first cells 
+             * preload c' and rhs' from previous cell.
+             *  
+             * assumed send happens outside this routine, but that
+             * c'(KMAX) and rhs'(KMAX) will be sent to next cell.
+             * ---------------------------------------------------------------------
+             * outer most do loops - sweeping in i direction
+             * ---------------------------------------------------------------------
+             * multiply c(i,j,0) by b_inverse and copy back to c
+             * multiply rhs(0) by b_inverse(0) and copy to rhs
+             * ---------------------------------------------------------------------
+             */
+        }
+    }
+
+    #pragma omp target teams distribute parallel for collapse(2)
+    for(j=1; j<=grid_points[1]-2; j++){
+        for(i=1; i<=grid_points[0]-2; i++){
+            binvcrhs(lhs[j][i][0][BB], lhs[j][i][0][CC], rhs[0][j][i]);
+            for(k=1; k<=ksize-1; k++){
+                matvec_sub(lhs[j][i][k][AA], rhs[k-1][j][i], rhs[k][j][i]);
+                matmul_sub(lhs[j][i][k][AA], lhs[j][i][k-1][CC], lhs[j][i][k][BB]);
+                binvcrhs(lhs[j][i][k][BB], lhs[j][i][k][CC], rhs[k][j][i]);
+            }
+        }
+    }
+    
+    #pragma omp target teams distribute parallel for collapse(2)
+    for(j=1; j<=grid_points[1]-2; j++){
+        for(i=1; i<=grid_points[0]-2; i++){
+            matvec_sub(lhs[j][i][ksize][AA], rhs[ksize-1][j][i], rhs[ksize][j][i]);
+            matmul_sub(lhs[j][i][ksize][AA], lhs[j][i][ksize-1][CC], lhs[j][i][ksize][BB]);
+            binvrhs(lhs[j][i][ksize][BB], rhs[ksize][j][i]);
+        }
+    }   
+    
+    #pragma omp target teams distribute parallel for collapse(2)
+    for(j=1; j<=grid_points[1]-2; j++){
+        for(i=1; i<=grid_points[0]-2; i++){
+            for(k=ksize-1; k>=0; k--){
+                for(m=0; m<BLOCK_SIZE; m++){
+                    for(n=0; n<BLOCK_SIZE; n++){
+                        rhs[k][j][i][m]=rhs[k][j][i][m]-lhs[j][i][k][CC][n][m]*rhs[k+1][j][i][n];
+                    }
+                }
+            }
+        }
+    }
+    if(timeron && thread_id==0){timer_stop(T_ZSOLVE);}
 }
