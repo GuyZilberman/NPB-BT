@@ -1,0 +1,18 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Using OMP_NUM_THREADS = 112
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+   ===========================================
+   =      NAS PARALLEL BENCHMARKS 4.1        =
+   =      OpenMP Versions                    =
+   =      C++                                =
+   ===========================================
+
+cd BT; make CLASS=S
+make[1]: Entering directory '/home/u9a7a1473bfa5fc0c75e999ec9571fa9/Project/NPB-BT/NPB-OMP/BT'
+make[2]: Entering directory '/home/u9a7a1473bfa5fc0c75e999ec9571fa9/Project/NPB-BT/NPB-OMP/sys'
+make[2]: Nothing to be done for 'all'.
+make[2]: Leaving directory '/home/u9a7a1473bfa5fc0c75e999ec9571fa9/Project/NPB-BT/NPB-OMP/sys'
+../sys/setparams bt S
+icpx -std=c++14  -c -I../common  -O3 -fiopenmp -mcmodel=medium -fopenmp-targets=spir64 bt.cpp
+make[1]: *** [Makefile:16: bt.o] Error 2
+make: *** [Makefile:11: bt] Interrupt
