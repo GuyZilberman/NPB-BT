@@ -81,6 +81,7 @@ Authors of the OpenMP code:
 #define T_RDIS2 10
 #define T_ADD 11
 #define T_LAST 11
+
 /* global variables */
 #if defined(DO_NOT_ALLOCATE_ARRAYS_WITH_DYNAMIC_MEMORY_AND_AS_SINGLE_DIMENSION)
 static double us[KMAX][JMAXP+1][IMAXP+1];
@@ -101,27 +102,22 @@ static double njac[PROBLEM_SIZE+1][PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5];
 static double lhs[PROBLEM_SIZE+1][PROBLEM_SIZE+1][PROBLEM_SIZE+1][3][5][5];
 static double ce[13][5];
 #else
-static double (*us)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_device(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
-static double (*vs)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_device(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
-static double (*ws)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_device(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
-static double (*qs)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_device(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
-static double (*rho_i)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_device(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
-static double (*square)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_device(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
-
+static double (*us)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_shared(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
+static double (*vs)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_shared(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
+static double (*ws)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_shared(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
+static double (*qs)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_shared(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
+static double (*rho_i)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_shared(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
+static double (*square)[JMAXP+1][IMAXP+1]=(double(*)[JMAXP+1][IMAXP+1])omp_target_alloc_shared(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)), 0);
 static double (*forcing)[JMAXP+1][IMAXP+1][5]=(double(*)[JMAXP+1][IMAXP+1][5])omp_target_alloc_shared(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)*(5)), 0);
-static double (*forcing_d)[JMAXP+1][IMAXP+1][5]=(double(*)[JMAXP+1][IMAXP+1][5])omp_target_alloc_device(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)*(5)), 0);
-
 static double (*u)[JMAXP+1][IMAXP+1][5]=(double(*)[JMAXP+1][IMAXP+1][5])omp_target_alloc_shared(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)*(5)), 0);
-static double (*u_d)[JMAXP+1][IMAXP+1][5]=(double(*)[JMAXP+1][IMAXP+1][5])omp_target_alloc_device(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)*(5)), 0);
-
 static double (*rhs)[JMAXP+1][IMAXP+1][5]=(double(*)[JMAXP+1][IMAXP+1][5])omp_target_alloc_shared(sizeof(double)*((KMAX)*(JMAXP+1)*(IMAXP+1)*(5)), 0);
 static double (*cuf)=(double*)malloc(sizeof(double)*(PROBLEM_SIZE+1));
 static double (*q)=(double*)malloc(sizeof(double)*(PROBLEM_SIZE+1));
 static double (*ue)[PROBLEM_SIZE+1]=(double(*)[PROBLEM_SIZE+1])malloc(sizeof(double)*((PROBLEM_SIZE+1)*(5)));
 static double (*buf)[PROBLEM_SIZE+1]=(double(*)[PROBLEM_SIZE+1])malloc(sizeof(double)*((PROBLEM_SIZE+1)*(5)));
+static double (*fjac)[PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5]=(double(*)[PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5])omp_target_alloc_shared(sizeof(double)*((PROBLEM_SIZE+1)*(PROBLEM_SIZE+1)*(PROBLEM_SIZE+1)*(5)*(5)), 0);
+static double (*njac)[PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5]=(double(*)[PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5])omp_target_alloc_shared(sizeof(double)*((PROBLEM_SIZE+1)*(PROBLEM_SIZE+1)*(PROBLEM_SIZE+1)*(5)*(5)), 0);
 double (*lhs)[PROBLEM_SIZE+1][PROBLEM_SIZE+1][3][5][5]=(double(*)[PROBLEM_SIZE+1][PROBLEM_SIZE+1][3][5][5])omp_target_alloc_shared(sizeof(double)*((PROBLEM_SIZE+1)*(PROBLEM_SIZE+1)*(PROBLEM_SIZE+1)*(3)*(5)*(5)), 0);
-static double (*fjac)[PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5]=(double(*)[PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5])omp_target_alloc_device(sizeof(double)*((PROBLEM_SIZE+1)*(PROBLEM_SIZE+1)*(PROBLEM_SIZE+1)*(5)*(5)), 0);
-static double (*njac)[PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5]=(double(*)[PROBLEM_SIZE+1][PROBLEM_SIZE+1][5][5])omp_target_alloc_device(sizeof(double)*((PROBLEM_SIZE+1)*(PROBLEM_SIZE+1)*(PROBLEM_SIZE+1)*(5)*(5)), 0);
 static double (*ce)[5]=(double(*)[5])malloc(sizeof(double)*((13)*(5)));
 #endif
 static double tx1, tx2, tx3, ty1, ty2, ty3, tz1, tz2, tz3, 
@@ -240,16 +236,6 @@ int main(int argc, char* argv[]){
 
 	exact_rhs();
 
-    #pragma omp target teams distribute parallel for collapse(3)
-    for (int k = 0 ; k < KMAX ; k++){
-        for (int j = 0 ; j < JMAXP+1 ; j++){
-            for (int i = 0 ; i < IMAXP+1 ; i++){
-                for (int m = 0 ; m < 5 ; m++){
-                    forcing_d[k][j][i][m] = forcing[k][j][i][m];
-                }
-            }
-        }
-    }
 	/*
 	 * ---------------------------------------------------------------------
 	 * do one time step to touch all code, and reinitialize
@@ -271,19 +257,6 @@ int main(int argc, char* argv[]){
 		}
 	}
 	timer_stop(1);
-
-    #pragma omp target teams distribute parallel for collapse(3)
-    for (int k = 0 ; k < KMAX ; k++){
-        for (int j = 0 ; j < JMAXP+1 ; j++){
-            for (int i = 0 ; i < IMAXP+1 ; i++){
-                for (int m = 0 ; m < 5 ; m++){
-                    forcing[k][j][i][m] = forcing_d[k][j][i][m];
-                }
-            }
-        }
-    }
-
-
 	tmax=timer_read(1);
 	verify(niter, &class_npb, &verified);
 	n3=1.0*grid_points[0]*grid_points[1]*grid_points[2];
@@ -799,7 +772,7 @@ void compute_rhs(){
             for(j=0; j<=grid_points[1]-1; j++){
                 for(i=0; i<=grid_points[0]-1; i++){
                     for(m=0; m<5; m++){
-                        rhs[k][j][i][m] = forcing_d[k][j][i][m];
+                        rhs[k][j][i][m] = forcing[k][j][i][m];
                     }
                 }
             }
